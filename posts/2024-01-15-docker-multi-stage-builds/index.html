@@ -1,0 +1,255 @@
+<!doctype html><html lang=it-it><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Docker Multi-Stage Builds: Ottimizzare le Immagini da 1GB a 50MB — TechBlog AI</title><meta name=description content="Guida pratica ai Docker multi-stage builds: come ridurre drasticamente le dimensioni delle immagini usando pattern avanzati con esempi reali."><meta name=keywords content="docker,devops,containers,optimization,backend"><meta property="og:title" content="Docker Multi-Stage Builds: Ottimizzare le Immagini da 1GB a 50MB"><meta property="og:description" content="Guida pratica ai Docker multi-stage builds: come ridurre drasticamente le dimensioni delle immagini usando pattern avanzati con esempi reali."><meta property="og:type" content="article"><meta property="og:url" content="https://cron.umbe.me/posts/2024-01-15-docker-multi-stage-builds/"><link rel=stylesheet href=/css/main.css><link rel=preconnect href=https://fonts.googleapis.com><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel=stylesheet></head><body><header class=site-header><div class="container header-inner"><a href=/ class=site-logo><span class=logo-bracket>[</span>
+TechBlog AI
+<span class=logo-bracket>]</span></a><nav class=site-nav><a href=/ class=nav-link>Home
+</a><a href=/posts/ class=nav-link>Articoli
+</a><a href=/tags/ class=nav-link>Tag
+</a><a href=/about/ class=nav-link>About</a></nav><div class=header-actions><button id=theme-toggle class=theme-toggle aria-label="Toggle theme">
+<span class=theme-icon>◐</span>
+</button>
+<a href=/index.xml class=rss-link aria-label="RSS Feed"><span>RSS</span></a></div></div></header><main class=main-content><div class="container container--narrow"><article class=post><header class=post-header><div class=post-breadcrumb><a href=/>Home</a> /
+<a href=/categories/devops>DevOps</a></div><h1 class=post-title>Docker Multi-Stage Builds: Ottimizzare le Immagini da 1GB a 50MB</h1><div class=post-tldr><strong>TL;DR:</strong> I multi-stage builds permettono di usare immagini grandi per compilare e immagini minimali per il runtime, riducendo le dimensioni dell'80-95% e migliorando sicurezza e performance.</div><div class=post-meta><time datetime=2024-01-15>📅 15 January 2024
+</time><span>⏱ 12 minuti</span>
+<span class="difficulty difficulty--intermediate">🟡
+intermediate
+</span><span class=ai-generated-label>🤖 Generato da AI</span></div><div class=post-tags><a href=/tags/docker class=tag>docker</a>
+<a href=/tags/devops class=tag>devops</a>
+<a href=/tags/containers class=tag>containers</a>
+<a href=/tags/optimization class=tag>optimization</a>
+<a href=/tags/backend class=tag>backend</a></div></header><nav class=toc id=toc><strong>📑 Indice</strong><nav id=TableOfContents><ul><li><a href=#introduzione>Introduzione</a></li><li><a href=#prerequisiti>Prerequisiti</a></li><li><a href=#il-problema-single-stage-build>Il Problema: Single-Stage Build</a></li><li><a href=#la-soluzione-multi-stage-build>La Soluzione: Multi-Stage Build</a></li><li><a href=#casi-duso-reali>Casi d&rsquo;uso reali</a><ul><li><a href=#nodejs-con-typescript>Node.js con TypeScript</a></li><li><a href=#python-con-poetry>Python con Poetry</a></li></ul></li><li><a href=#errori-comuni-e-come-evitarli>Errori comuni e come evitarli</a></li><li><a href=#best-practices>Best Practices</a></li><li><a href=#performance-considerations>Performance Considerations</a></li><li><a href=#conclusioni-e-next-steps>Conclusioni e Next Steps</a></li><li><a href=#risorse-aggiuntive>Risorse aggiuntive</a></li></ul></nav></nav><div class=post-content><h2 id=introduzione>Introduzione</h2><p>Un&rsquo;immagine Docker da 1.2GB per un&rsquo;applicazione Go da 10MB: suona familiare? Questo è uno dei problemi più comuni e costosi nel mondo dei container. Tempi di pull lunghi, storage sprecato, superficie d&rsquo;attacco inutilmente grande.</p><p>I <strong>multi-stage builds</strong> risolvono questo problema in modo elegante, permettendoti di usare un&rsquo;immagine ricca di tool per la build e un&rsquo;immagine minimale per la produzione, tutto in un singolo Dockerfile.</p><h2 id=prerequisiti>Prerequisiti</h2><ul><li>Docker installato (versione 17.05+)</li><li>Conoscenza base dei Dockerfile</li><li>Un&rsquo;applicazione da containerizzare (usiamo Go e Node.js come esempi)</li></ul><h2 id=il-problema-single-stage-build>Il Problema: Single-Stage Build</h2><p>Vediamo prima perché le build tradizionali sono problematiche:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-dockerfile data-lang=dockerfile><span class=line><span class=cl><span class=c># ❌ Single-stage: tutto in un&#39;immagine</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>golang:1.21</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>WORKDIR</span><span class=w> </span><span class=s>/app</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> . .<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Install build tools</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> apt-get update <span class=o>&amp;&amp;</span> apt-get install -y git make<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Build</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> go build -o server .<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>EXPOSE</span><span class=w> </span><span class=s>8080</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>CMD</span> <span class=p>[</span><span class=s2>&#34;./server&#34;</span><span class=p>]</span><span class=err>
+</span></span></span></code></pre></td></tr></table></div></div><p>Questa immagine includerà:</p><ul><li>Il compilatore Go completo (~800MB)</li><li>Tutti i source files</li><li>I tool di build (git, make, etc.)</li><li>Cache dei moduli</li></ul><p>Risultato: <strong>~1.1GB</strong> per un binario da 8MB.</p><h2 id=la-soluzione-multi-stage-build>La Soluzione: Multi-Stage Build</h2><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-dockerfile data-lang=dockerfile><span class=line><span class=cl><span class=c># ✅ Multi-stage: separare build e runtime</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Stage 1: Builder</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>golang:1.21-alpine</span><span class=w> </span><span class=k>AS</span><span class=w> </span><span class=s>builder</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>WORKDIR</span><span class=w> </span><span class=s>/app</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Copia solo i file per le dipendenze prima (cache layer ottimizzato)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> go.mod go.sum ./<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> go mod download<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Copia il codice sorgente</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> . .<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Build con ottimizzazioni per produzione</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> <span class=nv>CGO_ENABLED</span><span class=o>=</span><span class=m>0</span> <span class=nv>GOOS</span><span class=o>=</span>linux go build <span class=se>\
+</span></span></span><span class=line><span class=cl>    -ldflags<span class=o>=</span><span class=s2>&#34;-w -s&#34;</span> <span class=se>\
+</span></span></span><span class=line><span class=cl>    -o /server .<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Stage 2: Runtime (immagine minimale)</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>scratch</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Copia solo il binario compilato</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> --from<span class=o>=</span>builder /server /server<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Copia i certificati SSL se necessario</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> --from<span class=o>=</span>builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>EXPOSE</span><span class=w> </span><span class=s>8080</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>ENTRYPOINT</span> <span class=p>[</span><span class=s2>&#34;/server&#34;</span><span class=p>]</span><span class=err>
+</span></span></span></code></pre></td></tr></table></div></div><p>Risultato: <strong>~8MB</strong> (solo il binario).</p><h2 id=casi-duso-reali>Casi d&rsquo;uso reali</h2><h3 id=nodejs-con-typescript>Node.js con TypeScript</h3><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-dockerfile data-lang=dockerfile><span class=line><span class=cl><span class=c># Stage 1: Install e compile</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>node:20-alpine</span><span class=w> </span><span class=k>AS</span><span class=w> </span><span class=s>deps</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>WORKDIR</span><span class=w> </span><span class=s>/app</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> package*.json ./<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> npm ci --only<span class=o>=</span>production<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>node:20-alpine</span><span class=w> </span><span class=k>AS</span><span class=w> </span><span class=s>builder</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>WORKDIR</span><span class=w> </span><span class=s>/app</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> package*.json ./<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> npm ci<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> . .<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> npm run build  <span class=c1># TypeScript compile</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Stage 3: Runtime</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>node:20-alpine</span><span class=w> </span><span class=k>AS</span><span class=w> </span><span class=s>runner</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>WORKDIR</span><span class=w> </span><span class=s>/app</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>ENV</span> <span class=nv>NODE_ENV</span><span class=o>=</span>production
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c># Solo le dipendenze di produzione</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> --from<span class=o>=</span>deps /app/node_modules ./node_modules<span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Solo il codice compilato</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> --from<span class=o>=</span>builder /app/dist ./dist<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> --from<span class=o>=</span>builder /app/package.json ./package.json<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>EXPOSE</span><span class=w> </span><span class=s>3000</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>USER</span><span class=w> </span><span class=s>node</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>CMD</span> <span class=p>[</span><span class=s2>&#34;node&#34;</span><span class=p>,</span> <span class=s2>&#34;dist/index.js&#34;</span><span class=p>]</span><span class=err>
+</span></span></span></code></pre></td></tr></table></div></div><h3 id=python-con-poetry>Python con Poetry</h3><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-dockerfile data-lang=dockerfile><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>python:3.12-slim</span><span class=w> </span><span class=k>AS</span><span class=w> </span><span class=s>builder</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> pip install poetry<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>ENV</span> <span class=nv>POETRY_VENVS_IN_PROJECT</span><span class=o>=</span><span class=nb>true</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>WORKDIR</span><span class=w> </span><span class=s>/app</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> pyproject.toml poetry.lock ./<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> poetry install --only<span class=o>=</span>main --no-root<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> . .<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> poetry build<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># Runtime stage</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>python:3.12-slim</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>WORKDIR</span><span class=w> </span><span class=s>/app</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> --from<span class=o>=</span>builder /app/.venv /app/.venv<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> --from<span class=o>=</span>builder /app/dist /app/dist<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>ENV</span> <span class=nv>PATH</span><span class=o>=</span><span class=s2>&#34;/app/.venv/bin:</span><span class=nv>$PATH</span><span class=s2>&#34;</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> pip install dist/*.whl<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>CMD</span> <span class=p>[</span><span class=s2>&#34;uvicorn&#34;</span><span class=p>,</span> <span class=s2>&#34;app.main:app&#34;</span><span class=p>,</span> <span class=s2>&#34;--host&#34;</span><span class=p>,</span> <span class=s2>&#34;0.0.0.0&#34;</span><span class=p>,</span> <span class=s2>&#34;--port&#34;</span><span class=p>,</span> <span class=s2>&#34;8000&#34;</span><span class=p>]</span><span class=err>
+</span></span></span></code></pre></td></tr></table></div></div><h2 id=errori-comuni-e-come-evitarli>Errori comuni e come evitarli</h2><blockquote><p>⚠️ <strong>Ordine dei layer</strong>: Copia sempre <code>package.json</code> e installa le dipendenze PRIMA di copiare il codice. Questo sfrutta la cache Docker.</p></blockquote><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-dockerfile data-lang=dockerfile><span class=line><span class=cl><span class=c># ❌ Invalida la cache ogni volta che il codice cambia</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> . .<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> npm install<span class=err>
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=c># ✅ Cache stabile per le dipendenze</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> package*.json ./<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>RUN</span> npm install<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>COPY</span> . .<span class=err>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 <strong>Non copiare il <code>.dockerignore</code></strong>: Crea sempre un file <code>.dockerignore</code> per escludere <code>node_modules</code>, <code>.git</code>, <code>*.log</code> e ambienti locali.</p></blockquote><pre tabindex=0><code class=language-gitignore data-lang=gitignore>node_modules
+.git
+.env*
+*.log
+dist
+coverage
+</code></pre><h2 id=best-practices>Best Practices</h2><p><strong>1. Usa tag specifici, mai <code>latest</code></strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-dockerfile data-lang=dockerfile><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>node:20.10.0-alpine</span>  <span class=c1># ✅ Riproducibile</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>node:latest</span>           <span class=c1># ❌ Non deterministico</span><span class=err>
+</span></span></span></code></pre></td></tr></table></div></div><p><strong>2. Un processo per container</strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-dockerfile data-lang=dockerfile><span class=line><span class=cl><span class=k>CMD</span> <span class=p>[</span><span class=s2>&#34;node&#34;</span><span class=p>,</span> <span class=s2>&#34;server.js&#34;</span><span class=p>]</span>     <span class=c1># ✅ Un processo</span><span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>CMD</span> <span class=p>[</span><span class=s2>&#34;./start.sh&#34;</span><span class=p>]</span>            <span class=c1># ⚠️ Script wrapper, ok ma attenzione ai segnali</span><span class=err>
+</span></span></span></code></pre></td></tr></table></div></div><p><strong>3. Non girare come root</strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-dockerfile data-lang=dockerfile><span class=line><span class=cl><span class=k>RUN</span> addgroup -S appgroup <span class=o>&amp;&amp;</span> adduser -S appuser -G appgroup<span class=err>
+</span></span></span><span class=line><span class=cl><span class=k>USER</span><span class=w> </span><span class=s>appuser</span><span class=err>
+</span></span></span></code></pre></td></tr></table></div></div><p><strong>4. Sfrutta BuildKit per performance</strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=nv>DOCKER_BUILDKIT</span><span class=o>=</span><span class=m>1</span> docker build .
+</span></span><span class=line><span class=cl><span class=c1># oppure aggiungi in /etc/docker/daemon.json:</span>
+</span></span><span class=line><span class=cl><span class=c1># { &#34;features&#34;: { &#34;buildkit&#34;: true } }</span>
+</span></span></code></pre></td></tr></table></div></div><h2 id=performance-considerations>Performance Considerations</h2><table><thead><tr><th>Approccio</th><th>Dimensione</th><th>Tempo di pull</th><th>Sicurezza</th></tr></thead><tbody><tr><td>Single-stage (ubuntu)</td><td>~1.2GB</td><td>~60s</td><td>⭐</td></tr><tr><td>Single-stage (alpine)</td><td>~300MB</td><td>~15s</td><td>⭐⭐</td></tr><tr><td>Multi-stage (alpine)</td><td>~50MB</td><td>~3s</td><td>⭐⭐⭐</td></tr><tr><td>Multi-stage (scratch)</td><td>~8MB</td><td>&lt;1s</td><td>⭐⭐⭐⭐</td></tr></tbody></table><h2 id=conclusioni-e-next-steps>Conclusioni e Next Steps</h2><p>I multi-stage builds sono uno strumento fondamentale per chiunque lavori con Docker in produzione. I benefici principali sono:</p><ul><li><strong>Riduzione dimensioni</strong> dell'80-95%</li><li><strong>Sicurezza migliorata</strong> (meno tool = meno superficie d&rsquo;attacco)</li><li><strong>Build più veloci</strong> nei CI/CD pipeline</li><li><strong>Stesso Dockerfile</strong> per sviluppo e produzione</li></ul><p>Come prossimi passi, esplora:</p><ul><li><a href=https://docs.docker.com/build/cache/>Docker BuildKit e cache mount</a></li><li><a href=https://github.com/GoogleContainerTools/distroless>Distroless images</a> di Google</li><li><a href=https://github.com/wagoodman/dive>Dive</a>: tool per analizzare i layer delle immagini</li></ul><h2 id=risorse-aggiuntive>Risorse aggiuntive</h2><ul><li><a href=https://docs.docker.com/build/building/multi-stage/>Documentazione ufficiale Docker multi-stage builds</a></li><li><a href=https://docs.docker.com/develop/develop-images/dockerfile_best-practices/>Best practices for writing Dockerfiles</a></li></ul></div><footer class=post-footer><div class=post-share><strong>Condividi:</strong>
+<a href="https://twitter.com/intent/tweet?text=docker-multi-stage-builds-ottimizzare-le-immagini-da-1gb-a-50mb&url=https%3a%2f%2fcron.umbe.me%2fposts%2f2024-01-15-docker-multi-stage-builds%2f" target=_blank rel=noopener>Twitter</a>
+<a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3a%2f%2fcron.umbe.me%2fposts%2f2024-01-15-docker-multi-stage-builds%2f" target=_blank rel=noopener>LinkedIn</a></div><nav class=post-nav></nav></footer></article></div></main><footer class=site-footer><div class="container footer-inner"><div class=footer-left><p><strong>TechBlog AI</strong> — Blog tecnico AI-powered</p><p class=footer-sub>Contenuti generati automaticamente con
+<a href=https://anthropic.com target=_blank rel=noopener>Claude AI</a>
+· Deploy con
+<a href=https://pages.github.com target=_blank rel=noopener>GitHub Pages</a></p></div><div class=footer-right><a href=https://github.com/tuousername target=_blank rel=noopener>GitHub</a>
+<a href=https://twitter.com/@tuohandle target=_blank rel=noopener>Twitter</a>
+<a href=/index.xml>RSS</a></div></div><div class=footer-bottom><p>© 2026 TechBlog AI · Powered by <a href=https://gohugo.io target=_blank rel=noopener>Hugo</a></p></div></footer><script src=/js/main.js></script></body></html>

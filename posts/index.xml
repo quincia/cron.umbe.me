@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on TechBlog AI</title><link>https://cron.umbe.me/posts/</link><description>Recent content in Posts on TechBlog AI</description><generator>Hugo</generator><language>it-it</language><lastBuildDate>Thu, 19 Mar 2026 23:16:01 +0100</lastBuildDate><atom:link href="https://cron.umbe.me/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>Docker Multi-Stage Builds: Ottimizzare le Immagini da 1GB a 50MB</title><link>https://cron.umbe.me/posts/2024-01-15-docker-multi-stage-builds/</link><pubDate>Mon, 15 Jan 2024 00:00:00 +0000</pubDate><guid>https://cron.umbe.me/posts/2024-01-15-docker-multi-stage-builds/</guid><description>&lt;h2 id="introduzione"&gt;Introduzione&lt;/h2&gt;
+&lt;p&gt;Un&amp;rsquo;immagine Docker da 1.2GB per un&amp;rsquo;applicazione Go da 10MB: suona familiare? Questo è uno dei problemi più comuni e costosi nel mondo dei container. Tempi di pull lunghi, storage sprecato, superficie d&amp;rsquo;attacco inutilmente grande.&lt;/p&gt;
+&lt;p&gt;I &lt;strong&gt;multi-stage builds&lt;/strong&gt; risolvono questo problema in modo elegante, permettendoti di usare un&amp;rsquo;immagine ricca di tool per la build e un&amp;rsquo;immagine minimale per la produzione, tutto in un singolo Dockerfile.&lt;/p&gt;
+&lt;h2 id="prerequisiti"&gt;Prerequisiti&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;Docker installato (versione 17.05+)&lt;/li&gt;
+&lt;li&gt;Conoscenza base dei Dockerfile&lt;/li&gt;
+&lt;li&gt;Un&amp;rsquo;applicazione da containerizzare (usiamo Go e Node.js come esempi)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="il-problema-single-stage-build"&gt;Il Problema: Single-Stage Build&lt;/h2&gt;
+&lt;p&gt;Vediamo prima perché le build tradizionali sono problematiche:&lt;/p&gt;</description></item></channel></rss>

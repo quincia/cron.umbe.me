@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>TechBlog AI</title><link>https://cron.umbe.me/</link><description>Recent content on TechBlog AI</description><generator>Hugo</generator><language>it-it</language><lastBuildDate>Thu, 19 Mar 2026 23:16:01 +0100</lastBuildDate><atom:link href="https://cron.umbe.me/index.xml" rel="self" type="application/rss+xml"/><item><title>Docker Multi-Stage Builds: Ottimizzare le Immagini da 1GB a 50MB</title><link>https://cron.umbe.me/posts/2024-01-15-docker-multi-stage-builds/</link><pubDate>Mon, 15 Jan 2024 00:00:00 +0000</pubDate><guid>https://cron.umbe.me/posts/2024-01-15-docker-multi-stage-builds/</guid><description>&lt;h2 id="introduzione"&gt;Introduzione&lt;/h2&gt;
+&lt;p&gt;Un&amp;rsquo;immagine Docker da 1.2GB per un&amp;rsquo;applicazione Go da 10MB: suona familiare? Questo è uno dei problemi più comuni e costosi nel mondo dei container. Tempi di pull lunghi, storage sprecato, superficie d&amp;rsquo;attacco inutilmente grande.&lt;/p&gt;
+&lt;p&gt;I &lt;strong&gt;multi-stage builds&lt;/strong&gt; risolvono questo problema in modo elegante, permettendoti di usare un&amp;rsquo;immagine ricca di tool per la build e un&amp;rsquo;immagine minimale per la produzione, tutto in un singolo Dockerfile.&lt;/p&gt;
+&lt;h2 id="prerequisiti"&gt;Prerequisiti&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;Docker installato (versione 17.05+)&lt;/li&gt;
+&lt;li&gt;Conoscenza base dei Dockerfile&lt;/li&gt;
+&lt;li&gt;Un&amp;rsquo;applicazione da containerizzare (usiamo Go e Node.js come esempi)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="il-problema-single-stage-build"&gt;Il Problema: Single-Stage Build&lt;/h2&gt;
+&lt;p&gt;Vediamo prima perché le build tradizionali sono problematiche:&lt;/p&gt;</description></item><item><title>About</title><link>https://cron.umbe.me/about/</link><pubDate>Mon, 01 Jan 2024 00:00:00 +0000</pubDate><guid>https://cron.umbe.me/about/</guid><description>&lt;h2 id="cosè-questo-blog"&gt;Cos&amp;rsquo;è questo blog?&lt;/h2&gt;
+&lt;p&gt;&lt;strong&gt;TechBlog AI&lt;/strong&gt; è un esperimento di blogging tecnico completamente automatizzato.
+Ogni articolo viene generato da &lt;a href="https://anthropic.com"&gt;Claude&lt;/a&gt; (Anthropic) e pubblicato automaticamente su GitHub Pages tramite GitHub Actions.&lt;/p&gt;
+&lt;h2 id="come-funziona"&gt;Come funziona&lt;/h2&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;Scheduler (cron) → GitHub Actions → Claude API → Post Hugo → Deploy GitHub Pages
+&lt;/code&gt;&lt;/pre&gt;&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;Due volte a settimana&lt;/strong&gt; (lunedì e giovedì), un workflow GitHub Actions si attiva&lt;/li&gt;
+&lt;li&gt;Viene chiamata l&amp;rsquo;&lt;strong&gt;API di Claude&lt;/strong&gt; con un prompt dettagliato che specifica argomento, categoria e difficoltà&lt;/li&gt;
+&lt;li&gt;Claude genera un &lt;strong&gt;post tecnico completo&lt;/strong&gt; con codice, esempi e best practices&lt;/li&gt;
+&lt;li&gt;Il post viene &lt;strong&gt;committato&lt;/strong&gt; automaticamente nel repository&lt;/li&gt;
+&lt;li&gt;Un secondo workflow esegue la &lt;strong&gt;build Hugo&lt;/strong&gt; e fa il &lt;strong&gt;deploy su GitHub Pages&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id="stack-tecnico"&gt;Stack tecnico&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Static site generator&lt;/strong&gt;: &lt;a href="https://gohugo.io"&gt;Hugo&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;AI content&lt;/strong&gt;: &lt;a href="https://anthropic.com"&gt;Claude API&lt;/a&gt; (claude-opus-4-5)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;CI/CD&lt;/strong&gt;: GitHub Actions&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Hosting&lt;/strong&gt;: GitHub Pages&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Trigger manuale&lt;/strong&gt;: workflow_dispatch con parametri custom&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="disclaimer"&gt;Disclaimer&lt;/h2&gt;
+&lt;p&gt;I contenuti sono generati da AI e potrebbero contenere imprecisioni.
+Usali come punto di partenza, non come riferimento definitivo.
+Verifica sempre il codice prima di usarlo in produzione.&lt;/p&gt;</description></item></channel></rss>
