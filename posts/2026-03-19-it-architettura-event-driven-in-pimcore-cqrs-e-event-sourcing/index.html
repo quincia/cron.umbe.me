@@ -1,0 +1,1100 @@
+<!doctype html><html lang=en><!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Architettura Event-Driven in Pimcore: CQRS e Event Sourcing &amp;middot; cron.umbe.me</title><meta name=description content="Technical blog on DevOps, Backend and Pimcore — AI generated, bilingually."><meta name=description content="Implementa CQRS e Event Sourcing in Pimcore 11 per gestire 50.000+ operazioni/ora. Guida avanzata con codice production-ready e pattern enterprise."><meta property="og:url" content="https://cron.umbe.me/posts/2026-03-19-it-architettura-event-driven-in-pimcore-cqrs-e-event-sourcing/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="Architettura Event-Driven in Pimcore: CQRS e Event Sourcing"><meta property="og:description" content="Implementa CQRS e Event Sourcing in Pimcore 11 per gestire 50.000+ operazioni/ora. Guida avanzata con codice production-ready e pattern enterprise."><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-19T00:00:00+00:00"><meta property="article:modified_time" content="2026-03-19T23:50:56+00:00"><meta property="article:tag" content="Pimcore"><meta property="article:tag" content="Cqrs"><meta property="article:tag" content="Event-Sourcing"><meta property="article:tag" content="Symfony"><meta property="article:tag" content="Cms"><meta property="article:tag" content="Advanced-Tutorial"><meta name=twitter:card content="summary"><meta name=twitter:title content="Architettura Event-Driven in Pimcore: CQRS e Event Sourcing"><meta name=twitter:description content="Implementa CQRS e Event Sourcing in Pimcore 11 per gestire 50.000+ operazioni/ora. Guida avanzata con codice production-ready e pattern enterprise."><link rel=stylesheet href=https://cron.umbe.me/css/style.css><link rel=stylesheet href=https://cron.umbe.me/css/fonts.css><script>(function(){const e=localStorage.getItem("darkMode");(e==="true"||!e&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.documentElement.setAttribute("data-theme","dark")})()</script></head><body><nav class=nav><div class=nav-container><a href=/><h2 class=nav-title>cron.umbe.me</h2></a><ul><li><a href=/posts/><span>Posts</span></a></li><li><a href=/tags/><span>Tags</span></a></li><li><a href=/about/><span>About</span></a></li><li><a href=/about/><span>About</span></a></li></ul></div></nav><div class=post><h1>Architettura Event-Driven in Pimcore: CQRS e Event Sourcing</h1><div class=post-info><p><a href=https://umbe.me>quincia</a></p><p><time datetime=2026-03-19>19 March 2026</time></p><p>10 min read</p></div><div class=post-content><h1 id=architettura-event-driven-in-pimcore-implementare-cqrs-e-event-sourcing-per-applicazioni-enterprise-scalabili>Architettura Event-Driven in Pimcore: Implementare CQRS e Event Sourcing per Applicazioni Enterprise Scalabili</h1><p>Pimcore è una piattaforma potente, ma la sua architettura monolitica può diventare un collo di bottiglia quando gestisci milioni di DataObject, decine di tenant e operazioni batch che bloccano l&rsquo;intera applicazione. Ho visto installazioni enterprise rallentare drasticamente durante importazioni massive perché ogni salvataggio di un Asset attiva listener sincroni, rigenera cache e aggiorna indici — tutto nello stesso thread HTTP.</p><p>Questo articolo mostra come superare questi limiti implementando un&rsquo;architettura Event-Driven con pattern CQRS e Event Sourcing. Non parliamo di teoria: vedrai codice production-ready, configurazioni testate e le trappole in cui sono caduto io stesso.</p><p>Il risultato finale: un sistema che gestisce 50.000+ operazioni/ora mantenendo latenza sotto i 100ms per le letture, con tracciabilità completa di ogni modifica su ogni DataObject.</p><h2 id=prerequisiti>Prerequisiti</h2><p><strong>Stack tecnico richiesto:</strong></p><ul><li>Pimcore 11.x con Symfony 6.4</li><li>PHP 8.2+ con estensioni <code>pcntl</code>, <code>redis</code></li><li>RabbitMQ 3.12+ o Redis 7+ (per Streams)</li><li>Elasticsearch 8.x</li><li>MySQL 8.0+ con replica read</li></ul><p><strong>Conoscenze necessarie:</strong></p><ul><li>Familiarità con Symfony Messenger e i suoi concetti (envelope, stamp, transport)</li><li>Comprensione del modello DataObject di Pimcore e dei suoi eventi</li><li>Esperienza con Doctrine e gestione delle transazioni</li></ul><p><strong>Ambiente di sviluppo:</strong></p><div class=highlight><div style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><table style=border-spacing:0;padding:0;margin:0;border:0><tr><td style=vertical-align:top;padding:0;margin:0;border:0><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">1
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">2
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">3
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">4
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">5
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">6
+</span></code></pre></td><td style=vertical-align:top;padding:0;margin:0;border:0;width:100%><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span><span style=color:#6272a4># Verifica estensioni PHP necessarie</span>
+</span></span><span style=display:flex><span>php -m | grep -E <span style=color:#f1fa8c>&#34;(amqp|redis|pcntl)&#34;</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#6272a4># Installa dipendenze aggiuntive</span>
+</span></span><span style=display:flex><span>composer require symfony/amqp-messenger symfony/redis-messenger
+</span></span><span style=display:flex><span>composer require enqueue/elasticsearch-bundle
+</span></span></code></pre></td></tr></table></div></div><h2 id=architettura-e-concetti-chiave>Architettura e Concetti Chiave</h2><p>Prima di scrivere codice, visualizziamo l&rsquo;architettura target:</p><pre tabindex=0><code>┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT REQUESTS                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                    ┌─────────────────┴─────────────────��
+                    ▼                                   ▼
+          ┌─────────────────┐                 ┌─────────────────┐
+          │   WRITE MODEL   │                 │   READ MODEL    │
+          │   (Commands)    │                 │   (Queries)     │
+          └────────┬────────┘                 └────────┬────────┘
+                   │                                   │
+                   ▼                                   ▼
+          ┌─────────────────┐                 ┌─────────────────┐
+          │  Command Bus    │                 │  Elasticsearch  │
+          │  (Sync/Async)   │                 │  Read Replicas  │
+          └────────┬────────┘                 └─────────────────┘
+                   │                                   ▲
+                   ▼                                   │
+          ┌─────────────────┐                         │
+          │   Event Store   │─────────────────��┐      │
+          │   (MySQL)       │                  │      │
+          └────────┬────────┘                  ▼      │
+                   │                   ┌──────────────┴──┐
+                   ▼                   │   Projectors    │
+          ┌─────────────────┐          │   (Consumers)   │
+          │  Domain Events  │──────────└─────────────────┘
+          └────────┬────────┘
+                   │
+                   ▼
+          ┌─────────────────┐
+          │   RabbitMQ      │
+          │   (Exchanges)   │
+          │                 │
+          │  ┌───────────┐  │
+          │  │ commands  │  │
+          │  ├───────────┤  │
+          │  │  events   │  │
+          │  ├───────────┤  │
+          │  │   async   │  │
+          │  └───────────┘  │
+          └─────────────────┘
+</code></pre><p><strong>Concetti fondamentali:</strong></p><p><strong>CQRS (Command Query Responsibility Segregation):</strong> separiamo fisicamente le operazioni di scrittura (Commands) dalle letture (Queries). Le scritture passano attraverso Pimcore e MySQL, le letture vanno direttamente su Elasticsearch o read replicas.</p><p><strong>Event Sourcing:</strong> invece di salvare solo lo stato corrente, registriamo ogni evento che ha modificato un DataObject. Questo ci dà versioning illimitato, audit trail completo e la possibilità di ricostruire lo stato a qualsiasi punto nel tempo.</p><p><strong>Eventual Consistency:</strong> accettiamo che i dati su Elasticsearch possano essere &ldquo;indietro&rdquo; di qualche secondo rispetto a MySQL. In cambio otteniamo scalabilità orizzontale delle letture.</p><h2 id=implementazione-passo-passo>Implementazione Passo-Passo</h2><h3 id=configurazione-di-symfony-messenger-con-trasporti-asincroni>Configurazione di Symfony Messenger con Trasporti Asincroni</h3><p>Partiamo dalla configurazione del Message Bus. Creeremo tre bus separati: uno per i comandi, uno per gli eventi e uno per le query.</p><div class=highlight><div style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><table style=border-spacing:0;padding:0;margin:0;border:0><tr><td style=vertical-align:top;padding:0;margin:0;border:0><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 1
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 2
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 3
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 4
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 5
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 6
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 7
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 8
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 9
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">10
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">11
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">12
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">13
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">14
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">15
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">16
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">17
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">18
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">19
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">20
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">21
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">22
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">23
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">24
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">25
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">26
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">27
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">28
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">29
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">30
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">31
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">32
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">33
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">34
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">35
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">36
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">37
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">38
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">39
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">40
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">41
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">42
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">43
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">44
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">45
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">46
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">47
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">48
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">49
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">50
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">51
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">52
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">53
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">54
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">55
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">56
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">57
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">58
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">59
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">60
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">61
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">62
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">63
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">64
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">65
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">66
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">67
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">68
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">69
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">70
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">71
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">72
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">73
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">74
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">75
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">76
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">77
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">78
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">79
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">80
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">81
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">82
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">83
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">84
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">85
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">86
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">87
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">88
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">89
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">90
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">91
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">92
+</span></code></pre></td><td style=vertical-align:top;padding:0;margin:0;border:0;width:100%><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-yaml data-lang=yaml><span style=display:flex><span><span style=color:#6272a4># config/packages/messenger.yaml</span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>framework</span>:
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>messenger</span>:
+</span></span><span style=display:flex><span>        <span style=color:#6272a4># Serializzazione custom per gestire oggetti Pimcore</span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>serializer</span>:
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>default_serializer</span>: messenger.transport.symfony_serializer
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>symfony_serializer</span>:
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>format</span>: json
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>context</span>: { }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#6272a4># Definiamo i bus separati per CQRS</span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>buses</span>:
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>command.bus</span>:
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>middleware</span>:
+</span></span><span style=display:flex><span>                    - doctrine_transaction  <span style=color:#6272a4># Wrap in transazione</span>
+</span></span><span style=display:flex><span>                    - App\Messenger\Middleware\TenantAwareMiddleware
+</span></span><span style=display:flex><span>                    - App\Messenger\Middleware\AuditLogMiddleware
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>default_middleware</span>: allow_no_handlers
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>event.bus</span>:
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>default_middleware</span>: allow_no_handlers
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>middleware</span>:
+</span></span><span style=display:flex><span>                    - App\Messenger\Middleware\TenantAwareMiddleware
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>query.bus</span>:
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>default_middleware</span>: allow_no_handlers
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>transports</span>:
+</span></span><span style=display:flex><span>            <span style=color:#6272a4># Comandi ad alta priorità - esecuzione quasi immediata</span>
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>commands_high</span>:
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>dsn</span>: <span style=color:#f1fa8c>&#39;%env(RABBITMQ_DSN)%&#39;</span>
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>options</span>:
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>exchange</span>:
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>name</span>: pimcore_commands
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>type</span>: direct
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>queues</span>:
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>commands_high</span>:
+</span></span><span style=display:flex><span>                            <span style=color:#ff79c6>binding_keys</span>: [high]
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>retry_strategy</span>:
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>max_retries</span>: <span style=color:#bd93f9>3</span>
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>delay</span>: <span style=color:#bd93f9>1000</span>
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>multiplier</span>: <span style=color:#bd93f9>2</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#6272a4># Comandi standard - batch operations</span>
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>commands_low</span>:
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>dsn</span>: <span style=color:#f1fa8c>&#39;%env(RABBITMQ_DSN)%&#39;</span>
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>options</span>:
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>exchange</span>:
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>name</span>: pimcore_commands
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>type</span>: direct
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>queues</span>:
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>commands_low</span>:
+</span></span><span style=display:flex><span>                            <span style=color:#ff79c6>binding_keys</span>: [low]
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>retry_strategy</span>:
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>max_retries</span>: <span style=color:#bd93f9>5</span>
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>delay</span>: <span style=color:#bd93f9>5000</span>
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>multiplier</span>: <span style=color:#bd93f9>3</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#6272a4># Eventi di dominio - fan-out a tutti i consumer</span>
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>domain_events</span>:
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>dsn</span>: <span style=color:#f1fa8c>&#39;%env(RABBITMQ_DSN)%&#39;</span>
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>options</span>:
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>exchange</span>:
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>name</span>: pimcore_domain_events
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>type</span>: fanout
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>queues</span>:
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>projector_elasticsearch</span>: ~
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>projector_cache</span>: ~
+</span></span><span style=display:flex><span>                        <span style=color:#ff79c6>notification_handler</span>: ~
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#6272a4># Operazioni async pesanti (import, export, report)</span>
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>async_heavy</span>:
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>dsn</span>: <span style=color:#f1fa8c>&#39;%env(REDIS_DSN)%/messages_heavy&#39;</span>
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>options</span>:
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>stream</span>: pimcore_heavy_jobs
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>group</span>: workers
+</span></span><span style=display:flex><span>                    <span style=color:#ff79c6>consumer</span>: <span style=color:#f1fa8c>&#39;%env(HOSTNAME)%&#39;</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#6272a4># Dead letter queue per messaggi falliti</span>
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>failed</span>:
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>dsn</span>: <span style=color:#f1fa8c>&#39;doctrine://default?queue_name=failed_messages&#39;</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>failure_transport</span>: failed
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>routing</span>:
+</span></span><span style=display:flex><span>            <span style=color:#6272a4># Routing dei comandi</span>
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>&#39;App\Command\DataObject\*&#39;</span>: commands_high
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>&#39;App\Command\Batch\*&#39;</span>: commands_low
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>&#39;App\Command\Import\*&#39;</span>: async_heavy
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#6272a4># Routing degli eventi</span>
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>&#39;App\Event\Domain\*&#39;</span>: domain_events
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ <strong>Attenzione:</strong> Non usare mai <code>sync://</code> come fallback in produzione. Se RabbitMQ non è raggiungibile, l&rsquo;applicazione deve fallire esplicitamente, non processare messaggi in modo sincrono rallentando tutto.</p></blockquote><p>Ora creiamo il middleware per gestire il multi-tenancy:</p><div class=highlight><div style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><table style=border-spacing:0;padding:0;margin:0;border:0><tr><td style=vertical-align:top;padding:0;margin:0;border:0><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 1
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 2
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 3
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 4
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 5
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 6
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 7
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 8
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 9
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">10
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">11
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">12
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">13
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">14
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">15
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">16
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">17
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">18
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">19
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">20
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">21
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">22
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">23
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">24
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">25
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">26
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">27
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">28
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">29
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">30
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">31
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">32
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">33
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">34
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">35
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">36
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">37
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">38
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">39
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">40
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">41
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">42
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">43
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">44
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">45
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">46
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">47
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">48
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">49
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">50
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">51
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">52
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">53
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">54
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">55
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">56
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">57
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">58
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">59
+</span></code></pre></td><td style=vertical-align:top;padding:0;margin:0;border:0;width:100%><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-php data-lang=php><span style=display:flex><span><span style=color:#ff79c6>&lt;?</span>php
+</span></span><span style=display:flex><span><span style=color:#6272a4>// src/Messenger/Middleware/TenantAwareMiddleware.php
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>declare</span>(strict_types<span style=color:#ff79c6>=</span><span style=color:#bd93f9>1</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>namespace</span> App\Messenger\Middleware;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> App\Messenger\Stamp\TenantStamp;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> App\Service\TenantResolver;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> Pimcore\Model\DataObject;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> Symfony\Component\Messenger\Envelope;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> Symfony\Component\Messenger\Middleware\MiddlewareInterface;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> Symfony\Component\Messenger\Middleware\StackInterface;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> Symfony\Component\Messenger\Stamp\ReceivedStamp;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * Middleware che propaga il contesto tenant attraverso i messaggi asincroni.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * Fondamentale per scenari multi-tenant dove ogni operazione deve essere
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * isolata nel proprio contesto dati.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> */</span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>final</span> <span style=color:#ff79c6>class</span> <span style=color:#50fa7b>TenantAwareMiddleware</span> <span style=color:#ff79c6>implements</span> MiddlewareInterface
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>__construct</span>(
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> readonly TenantResolver <span style=color:#8be9fd;font-style:italic>$tenantResolver</span>,
+</span></span><span style=display:flex><span>    ) {
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>handle</span>(Envelope <span style=color:#8be9fd;font-style:italic>$envelope</span>, StackInterface <span style=color:#8be9fd;font-style:italic>$stack</span>)<span style=color:#ff79c6>:</span> Envelope
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#6272a4>// Se il messaggio arriva da un transport (consumer), ripristiniamo il tenant
+</span></span></span><span style=display:flex><span>        <span style=color:#ff79c6>if</span> (<span style=color:#8be9fd;font-style:italic>$envelope</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>last</span>(ReceivedStamp<span style=color:#ff79c6>::</span><span style=color:#50fa7b>class</span>) <span style=color:#ff79c6>!==</span> <span style=color:#ff79c6>null</span>) {
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$tenantStamp</span> <span style=color:#ff79c6>=</span> <span style=color:#8be9fd;font-style:italic>$envelope</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>last</span>(TenantStamp<span style=color:#ff79c6>::</span><span style=color:#50fa7b>class</span>);
+</span></span><span style=display:flex><span>            
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>if</span> (<span style=color:#8be9fd;font-style:italic>$tenantStamp</span> instanceof TenantStamp) {
+</span></span><span style=display:flex><span>                <span style=color:#6272a4>// Impostiamo il tenant context per Pimcore
+</span></span></span><span style=display:flex><span>                <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>tenantResolver</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>setCurrentTenant</span>(<span style=color:#8be9fd;font-style:italic>$tenantStamp</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getTenantId</span>());
+</span></span><span style=display:flex><span>                
+</span></span><span style=display:flex><span>                <span style=color:#6272a4>// Configuriamo anche l&#39;inheritance per i DataObject
+</span></span></span><span style=display:flex><span>                DataObject<span style=color:#ff79c6>::</span><span style=color:#50fa7b>setHideUnpublished</span>(<span style=color:#8be9fd;font-style:italic>$tenantStamp</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>hideUnpublished</span>());
+</span></span><span style=display:flex><span>                DataObject<span style=color:#ff79c6>::</span><span style=color:#50fa7b>setGetInheritedValues</span>(<span style=color:#8be9fd;font-style:italic>$tenantStamp</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>inheritValues</span>());
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$stack</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>next</span>()<span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>handle</span>(<span style=color:#8be9fd;font-style:italic>$envelope</span>, <span style=color:#8be9fd;font-style:italic>$stack</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#6272a4>// Se stiamo inviando un messaggio, aggiungiamo il tenant corrente
+</span></span></span><span style=display:flex><span>        <span style=color:#8be9fd;font-style:italic>$currentTenant</span> <span style=color:#ff79c6>=</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>tenantResolver</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getCurrentTenant</span>();
+</span></span><span style=display:flex><span>        
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>if</span> (<span style=color:#8be9fd;font-style:italic>$currentTenant</span> <span style=color:#ff79c6>!==</span> <span style=color:#ff79c6>null</span> <span style=color:#ff79c6>&amp;&amp;</span> <span style=color:#8be9fd;font-style:italic>$envelope</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>last</span>(TenantStamp<span style=color:#ff79c6>::</span><span style=color:#50fa7b>class</span>) <span style=color:#ff79c6>===</span> <span style=color:#ff79c6>null</span>) {
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$envelope</span> <span style=color:#ff79c6>=</span> <span style=color:#8be9fd;font-style:italic>$envelope</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>with</span>(<span style=color:#ff79c6>new</span> TenantStamp(
+</span></span><span style=display:flex><span>                tenantId<span style=color:#ff79c6>:</span> <span style=color:#8be9fd;font-style:italic>$currentTenant</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getId</span>(),
+</span></span><span style=display:flex><span>                hideUnpublished<span style=color:#ff79c6>:</span> DataObject<span style=color:#ff79c6>::</span><span style=color:#50fa7b>getHideUnpublished</span>(),
+</span></span><span style=display:flex><span>                inheritValues<span style=color:#ff79c6>:</span> DataObject<span style=color:#ff79c6>::</span><span style=color:#50fa7b>getGetInheritedValues</span>(),
+</span></span><span style=display:flex><span>            ));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$stack</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>next</span>()<span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>handle</span>(<span style=color:#8be9fd;font-style:italic>$envelope</span>, <span style=color:#8be9fd;font-style:italic>$stack</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></td></tr></table></div></div><div class=highlight><div style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><table style=border-spacing:0;padding:0;margin:0;border:0><tr><td style=vertical-align:top;padding:0;margin:0;border:0><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 1
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 2
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 3
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 4
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 5
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 6
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 7
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 8
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 9
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">10
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">11
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">12
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">13
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">14
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">15
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">16
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">17
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">18
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">19
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">20
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">21
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">22
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">23
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">24
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">25
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">26
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">27
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">28
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">29
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">30
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">31
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">32
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">33
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">34
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">35
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">36
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">37
+</span></code></pre></td><td style=vertical-align:top;padding:0;margin:0;border:0;width:100%><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-php data-lang=php><span style=display:flex><span><span style=color:#ff79c6>&lt;?</span>php
+</span></span><span style=display:flex><span><span style=color:#6272a4>// src/Messenger/Stamp/TenantStamp.php
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>declare</span>(strict_types<span style=color:#ff79c6>=</span><span style=color:#bd93f9>1</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>namespace</span> App\Messenger\Stamp;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> Symfony\Component\Messenger\Stamp\StampInterface;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * Stamp che trasporta il contesto tenant attraverso i messaggi.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * Serializzato automaticamente nel payload del messaggio.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> */</span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>final</span> readonly <span style=color:#ff79c6>class</span> <span style=color:#50fa7b>TenantStamp</span> <span style=color:#ff79c6>implements</span> StampInterface
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>__construct</span>(
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> string <span style=color:#8be9fd;font-style:italic>$tenantId</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> bool <span style=color:#8be9fd;font-style:italic>$hideUnpublished</span> <span style=color:#ff79c6>=</span> <span style=color:#ff79c6>true</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> bool <span style=color:#8be9fd;font-style:italic>$inheritValues</span> <span style=color:#ff79c6>=</span> <span style=color:#ff79c6>true</span>,
+</span></span><span style=display:flex><span>    ) {
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getTenantId</span>()<span style=color:#ff79c6>:</span> string
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>tenantId</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>hideUnpublished</span>()<span style=color:#ff79c6>:</span> bool
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>hideUnpublished</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>inheritValues</span>()<span style=color:#ff79c6>:</span> bool
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>inheritValues</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></td></tr></table></div></div><h3 id=implementazione-di-event-sourcing-per-dataobject>Implementazione di Event Sourcing per DataObject</h3><p>Pimcore offre versioning nativo, ma è limitato: salva snapshot completi, non supporta proiezioni custom e diventa lento con migliaia di versioni. Implementiamo Event Sourcing completo.</p><div class=highlight><div style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><table style=border-spacing:0;padding:0;margin:0;border:0><tr><td style=vertical-align:top;padding:0;margin:0;border:0><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 1
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 2
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 3
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 4
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 5
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 6
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 7
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 8
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 9
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">10
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">11
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">12
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">13
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">14
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">15
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">16
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">17
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">18
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">19
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">20
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">21
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">22
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">23
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">24
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">25
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">26
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">27
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">28
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">29
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">30
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">31
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">32
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">33
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">34
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">35
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">36
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">37
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">38
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">39
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">40
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">41
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">42
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">43
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">44
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">45
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">46
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">47
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">48
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">49
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">50
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">51
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">52
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">53
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">54
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">55
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">56
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">57
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">58
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">59
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">60
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">61
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">62
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">63
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">64
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">65
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">66
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">67
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">68
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">69
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">70
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">71
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">72
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">73
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">74
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">75
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">76
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">77
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">78
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">79
+</span></code></pre></td><td style=vertical-align:top;padding:0;margin:0;border:0;width:100%><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-php data-lang=php><span style=display:flex><span><span style=color:#ff79c6>&lt;?</span>php
+</span></span><span style=display:flex><span><span style=color:#6272a4>// src/EventSourcing/Event/DataObjectEvent.php
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>declare</span>(strict_types<span style=color:#ff79c6>=</span><span style=color:#bd93f9>1</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>namespace</span> App\EventSourcing\Event;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> DateTimeImmutable;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> Ramsey\Uuid\UuidInterface;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * Classe base per tutti gli eventi di dominio relativi ai DataObject.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * Immutabile per design - un evento rappresenta qualcosa che È SUCCESSO.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> */</span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>abstract</span> readonly <span style=color:#ff79c6>class</span> <span style=color:#50fa7b>DataObjectEvent</span>
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>__construct</span>(
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> UuidInterface <span style=color:#8be9fd;font-style:italic>$eventId</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> int <span style=color:#8be9fd;font-style:italic>$aggregateId</span>,      <span style=color:#6272a4>// ID del DataObject Pimcore
+</span></span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> string <span style=color:#8be9fd;font-style:italic>$aggregateType</span>, <span style=color:#6272a4>// Classe del DataObject
+</span></span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> int <span style=color:#8be9fd;font-style:italic>$version</span>,          <span style=color:#6272a4>// Versione progressiva dell&#39;aggregato
+</span></span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> string <span style=color:#8be9fd;font-style:italic>$tenantId</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> <span style=color:#ff79c6>?</span>int <span style=color:#8be9fd;font-style:italic>$userId</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> DateTimeImmutable <span style=color:#8be9fd;font-style:italic>$occurredAt</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> <span style=color:#ff79c6>array</span> <span style=color:#8be9fd;font-style:italic>$metadata</span> <span style=color:#ff79c6>=</span> [],
+</span></span><span style=display:flex><span>    ) {
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getEventId</span>()<span style=color:#ff79c6>:</span> UuidInterface
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>eventId</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getAggregateId</span>()<span style=color:#ff79c6>:</span> int
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>aggregateId</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getAggregateType</span>()<span style=color:#ff79c6>:</span> string
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>aggregateType</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getVersion</span>()<span style=color:#ff79c6>:</span> int
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>version</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getTenantId</span>()<span style=color:#ff79c6>:</span> string
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>tenantId</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getUserId</span>()<span style=color:#ff79c6>:</span> <span style=color:#ff79c6>?</span>int
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>userId</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getOccurredAt</span>()<span style=color:#ff79c6>:</span> DateTimeImmutable
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>occurredAt</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getMetadata</span>()<span style=color:#ff79c6>:</span> <span style=color:#ff79c6>array</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>metadata</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Ogni evento deve definire il proprio tipo univoco.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Usato per la deserializzazione e il routing.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>abstract</span> <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>static</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getEventType</span>()<span style=color:#ff79c6>:</span> string;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Payload specifico dell&#39;evento.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>abstract</span> <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getPayload</span>()<span style=color:#ff79c6>:</span> <span style=color:#ff79c6>array</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></td></tr></table></div></div><div class=highlight><div style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><table style=border-spacing:0;padding:0;margin:0;border:0><tr><td style=vertical-align:top;padding:0;margin:0;border:0><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 1
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 2
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 3
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 4
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 5
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 6
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 7
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 8
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 9
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">10
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">11
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">12
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">13
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">14
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">15
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">16
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">17
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">18
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">19
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">20
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">21
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">22
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">23
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">24
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">25
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">26
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">27
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">28
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">29
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">30
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">31
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">32
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">33
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">34
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">35
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">36
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">37
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">38
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">39
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">40
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">41
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">42
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">43
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">44
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">45
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">46
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">47
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">48
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">49
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">50
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">51
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">52
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">53
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">54
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">55
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">56
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">57
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">58
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">59
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">60
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">61
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">62
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">63
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">64
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">65
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">66
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">67
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">68
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">69
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">70
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">71
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">72
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">73
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">74
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">75
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">76
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">77
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">78
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">79
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">80
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">81
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">82
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">83
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">84
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">85
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">86
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">87
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">88
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">89
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">90
+</span></code></pre></td><td style=vertical-align:top;padding:0;margin:0;border:0;width:100%><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-php data-lang=php><span style=display:flex><span><span style=color:#ff79c6>&lt;?</span>php
+</span></span><span style=display:flex><span><span style=color:#6272a4>// src/EventSourcing/Event/DataObjectPropertyChanged.php
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>declare</span>(strict_types<span style=color:#ff79c6>=</span><span style=color:#bd93f9>1</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>namespace</span> App\EventSourcing\Event;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> DateTimeImmutable;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> Ramsey\Uuid\UuidInterface;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * Evento emesso quando una o più proprietà di un DataObject cambiano.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * Registra solo i delta, non l&#39;intero oggetto.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> */</span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>final</span> readonly <span style=color:#ff79c6>class</span> <span style=color:#50fa7b>DataObjectPropertyChanged</span> <span style=color:#ff79c6>extends</span> DataObjectEvent
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * @param array&lt;string, array{old: mixed, new: mixed}&gt; $changes
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>__construct</span>(
+</span></span><span style=display:flex><span>        UuidInterface <span style=color:#8be9fd;font-style:italic>$eventId</span>,
+</span></span><span style=display:flex><span>        int <span style=color:#8be9fd;font-style:italic>$aggregateId</span>,
+</span></span><span style=display:flex><span>        string <span style=color:#8be9fd;font-style:italic>$aggregateType</span>,
+</span></span><span style=display:flex><span>        int <span style=color:#8be9fd;font-style:italic>$version</span>,
+</span></span><span style=display:flex><span>        string <span style=color:#8be9fd;font-style:italic>$tenantId</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>?</span>int <span style=color:#8be9fd;font-style:italic>$userId</span>,
+</span></span><span style=display:flex><span>        DateTimeImmutable <span style=color:#8be9fd;font-style:italic>$occurredAt</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> <span style=color:#ff79c6>array</span> <span style=color:#8be9fd;font-style:italic>$changes</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> string <span style=color:#8be9fd;font-style:italic>$changeSource</span>, <span style=color:#6272a4>// &#39;api&#39;, &#39;admin&#39;, &#39;import&#39;, &#39;workflow&#39;
+</span></span></span><span style=display:flex><span>        <span style=color:#ff79c6>array</span> <span style=color:#8be9fd;font-style:italic>$metadata</span> <span style=color:#ff79c6>=</span> [],
+</span></span><span style=display:flex><span>    ) {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>parent</span><span style=color:#ff79c6>::</span><span style=color:#50fa7b>__construct</span>(
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$eventId</span>,
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$aggregateId</span>,
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$aggregateType</span>,
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$version</span>,
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$tenantId</span>,
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$userId</span>,
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$occurredAt</span>,
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$metadata</span>
+</span></span><span style=display:flex><span>        );
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>static</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getEventType</span>()<span style=color:#ff79c6>:</span> string
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#f1fa8c>&#39;data_object.property_changed&#39;</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getPayload</span>()<span style=color:#ff79c6>:</span> <span style=color:#ff79c6>array</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> [
+</span></span><span style=display:flex><span>            <span style=color:#f1fa8c>&#39;changes&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>changes</span>,
+</span></span><span style=display:flex><span>            <span style=color:#f1fa8c>&#39;change_source&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>changeSource</span>,
+</span></span><span style=display:flex><span>        ];
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getChanges</span>()<span style=color:#ff79c6>:</span> <span style=color:#ff79c6>array</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>changes</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getChangeSource</span>()<span style=color:#ff79c6>:</span> string
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>changeSource</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Verifica se una specifica proprietà è cambiata.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>hasPropertyChanged</span>(string <span style=color:#8be9fd;font-style:italic>$propertyName</span>)<span style=color:#ff79c6>:</span> bool
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> isset(<span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>changes</span>[<span style=color:#8be9fd;font-style:italic>$propertyName</span>]);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Ottiene il valore precedente di una proprietà.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getOldValue</span>(string <span style=color:#8be9fd;font-style:italic>$propertyName</span>)<span style=color:#ff79c6>:</span> mixed
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>changes</span>[<span style=color:#8be9fd;font-style:italic>$propertyName</span>][<span style=color:#f1fa8c>&#39;old&#39;</span>] <span style=color:#ff79c6>??</span> <span style=color:#ff79c6>null</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Ottiene il nuovo valore di una proprietà.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getNewValue</span>(string <span style=color:#8be9fd;font-style:italic>$propertyName</span>)<span style=color:#ff79c6>:</span> mixed
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>changes</span>[<span style=color:#8be9fd;font-style:italic>$propertyName</span>][<span style=color:#f1fa8c>&#39;new&#39;</span>] <span style=color:#ff79c6>??</span> <span style=color:#ff79c6>null</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></td></tr></table></div></div><p>Ora l&rsquo;Event Store — il cuore del sistema:</p><div class=highlight><div style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><table style=border-spacing:0;padding:0;margin:0;border:0><tr><td style=vertical-align:top;padding:0;margin:0;border:0><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 1
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 2
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 3
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 4
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 5
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 6
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 7
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 8
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 9
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">10
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">11
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">12
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">13
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">14
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">15
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">16
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">17
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">18
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">19
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">20
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">21
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">22
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">23
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">24
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">25
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">26
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">27
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">28
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">29
+</span></code></pre></td><td style=vertical-align:top;padding:0;margin:0;border:0;width:100%><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-php data-lang=php><span style=display:flex><span><span style=color:#ff79c6>&lt;?</span>php
+</span></span><span style=display:flex><span><span style=color:#6272a4>// src/EventSourcing/Store/EventStoreInterface.php
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>declare</span>(strict_types<span style=color:#ff79c6>=</span><span style=color:#bd93f9>1</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>namespace</span> App\EventSourcing\Store;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> App\EventSourcing\Event\DataObjectEvent;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>interface</span> EventStoreInterface
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * @throws ConcurrencyException
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>append</span>(DataObjectEvent <span style=color:#8be9fd;font-style:italic>$event</span>, int <span style=color:#8be9fd;font-style:italic>$expectedVersion</span>)<span style=color:#ff79c6>:</span> void;
+</span></span><span style=display:flex><span>    
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * @return iterable&lt;DataObjectEvent&gt;
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getEventsForAggregate</span>(
+</span></span><span style=display:flex><span>        int <span style=color:#8be9fd;font-style:italic>$aggregateId</span>,
+</span></span><span style=display:flex><span>        int <span style=color:#8be9fd;font-style:italic>$fromVersion</span> <span style=color:#ff79c6>=</span> <span style=color:#bd93f9>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>?</span>int <span style=color:#8be9fd;font-style:italic>$toVersion</span> <span style=color:#ff79c6>=</span> <span style=color:#ff79c6>null</span>
+</span></span><span style=display:flex><span>    )<span style=color:#ff79c6>:</span> iterable;
+</span></span><span style=display:flex><span>    
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getCurrentVersion</span>(int <span style=color:#8be9fd;font-style:italic>$aggregateId</span>)<span style=color:#ff79c6>:</span> int;
+</span></span><span style=display:flex><span>    
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getSnapshotAtVersion</span>(int <span style=color:#8be9fd;font-style:italic>$aggregateId</span>, int <span style=color:#8be9fd;font-style:italic>$version</span>)<span style=color:#ff79c6>:</span> <span style=color:#ff79c6>array</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></td></tr></table></div></div><div class=highlight><div style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><table style=border-spacing:0;padding:0;margin:0;border:0><tr><td style=vertical-align:top;padding:0;margin:0;border:0><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">  1
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">  2
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">  3
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">  4
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">  5
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">  6
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">  7
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">  8
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">  9
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 10
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 11
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 12
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 13
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 14
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 15
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 16
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 17
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 18
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 19
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 20
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 21
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 22
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 23
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 24
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 25
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 26
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 27
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 28
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 29
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 30
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 31
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 32
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 33
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 34
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 35
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 36
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 37
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 38
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 39
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 40
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 41
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 42
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 43
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 44
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 45
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 46
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 47
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 48
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 49
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 50
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 51
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 52
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 53
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 54
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 55
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 56
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 57
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 58
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 59
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 60
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 61
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 62
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 63
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 64
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 65
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 66
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 67
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 68
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 69
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 70
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 71
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 72
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 73
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 74
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 75
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 76
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 77
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 78
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 79
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 80
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 81
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 82
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 83
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 84
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 85
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 86
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 87
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 88
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 89
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 90
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 91
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 92
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 93
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 94
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 95
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 96
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 97
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 98
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f"> 99
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">100
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">101
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">102
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">103
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">104
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">105
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">106
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">107
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">108
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">109
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">110
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">111
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">112
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">113
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">114
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">115
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">116
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">117
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">118
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">119
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">120
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">121
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">122
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">123
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">124
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">125
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">126
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">127
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">128
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">129
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">130
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">131
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">132
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">133
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">134
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">135
+</span><span style="white-space:pre;-webkit-user-select:none;user-select:none;margin-right:.4em;padding:0 .4em;color:#7f7f7f">136
+</span></code></pre></td><td style=vertical-align:top;padding:0;margin:0;border:0;width:100%><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-php data-lang=php><span style=display:flex><span><span style=color:#ff79c6>&lt;?</span>php
+</span></span><span style=display:flex><span><span style=color:#6272a4>// src/EventSourcing/Store/DoctrineEventStore.php
+</span></span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>declare</span>(strict_types<span style=color:#ff79c6>=</span><span style=color:#bd93f9>1</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>namespace</span> App\EventSourcing\Store;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> App\EventSourcing\Event\DataObjectEvent;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> App\EventSourcing\Event\DataObjectPropertyChanged;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> App\EventSourcing\Exception\ConcurrencyException;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> App\EventSourcing\Serializer\EventSerializer;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> Doctrine\DBAL\Connection;
+</span></span><span style=display:flex><span><span style=color:#ff79c6>use</span> Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * Event Store basato su MySQL con supporto per optimistic concurrency control.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * La tabella usa una chiave composta (aggregate_id, version) per garantire
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> * l&#39;ordine degli eventi e prevenire write conflicts.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c> */</span>
+</span></span><span style=display:flex><span><span style=color:#ff79c6>final</span> <span style=color:#ff79c6>class</span> <span style=color:#50fa7b>DoctrineEventStore</span> <span style=color:#ff79c6>implements</span> EventStoreInterface
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>private</span> <span style=color:#ff79c6>const</span> TABLE_NAME <span style=color:#ff79c6>=</span> <span style=color:#f1fa8c>&#39;event_store&#39;</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>__construct</span>(
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> readonly Connection <span style=color:#8be9fd;font-style:italic>$connection</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>private</span> readonly EventSerializer <span style=color:#8be9fd;font-style:italic>$serializer</span>,
+</span></span><span style=display:flex><span>    ) {
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Appende un evento allo store.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * 
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * @throws ConcurrencyException Se la versione attesa non corrisponde
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>append</span>(DataObjectEvent <span style=color:#8be9fd;font-style:italic>$event</span>, int <span style=color:#8be9fd;font-style:italic>$expectedVersion</span>)<span style=color:#ff79c6>:</span> void
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#6272a4>// Verifichiamo che la versione sia quella attesa (optimistic locking)
+</span></span></span><span style=display:flex><span>        <span style=color:#ff79c6>if</span> (<span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getVersion</span>() <span style=color:#ff79c6>!==</span> <span style=color:#8be9fd;font-style:italic>$expectedVersion</span> <span style=color:#ff79c6>+</span> <span style=color:#bd93f9>1</span>) {
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>throw</span> <span style=color:#ff79c6>new</span> ConcurrencyException(sprintf(
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;Versione attesa %d, ricevuta %d per aggregato %d&#39;</span>,
+</span></span><span style=display:flex><span>                <span style=color:#8be9fd;font-style:italic>$expectedVersion</span> <span style=color:#ff79c6>+</span> <span style=color:#bd93f9>1</span>,
+</span></span><span style=display:flex><span>                <span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getVersion</span>(),
+</span></span><span style=display:flex><span>                <span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getAggregateId</span>()
+</span></span><span style=display:flex><span>            ));
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>try</span> {
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>connection</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>insert</span>(self<span style=color:#ff79c6>::</span><span style=color:#50fa7b>TABLE_NAME</span>, [
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;event_id&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getEventId</span>()<span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>toString</span>(),
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;aggregate_id&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getAggregateId</span>(),
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;aggregate_type&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getAggregateType</span>(),
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;version&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getVersion</span>(),
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;event_type&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>::</span><span style=color:#50fa7b>getEventType</span>(),
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;payload&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>serializer</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>serialize</span>(<span style=color:#8be9fd;font-style:italic>$event</span>),
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;metadata&#39;</span> <span style=color:#ff79c6>=&gt;</span> json_encode(<span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getMetadata</span>(), JSON_THROW_ON_ERROR),
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;tenant_id&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getTenantId</span>(),
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;user_id&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getUserId</span>(),
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;occurred_at&#39;</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getOccurredAt</span>()<span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>format</span>(<span style=color:#f1fa8c>&#39;Y-m-d H:i:s.u&#39;</span>),
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;created_at&#39;</span> <span style=color:#ff79c6>=&gt;</span> (<span style=color:#ff79c6>new</span> \DateTimeImmutable())<span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>format</span>(<span style=color:#f1fa8c>&#39;Y-m-d H:i:s.u&#39;</span>),
+</span></span><span style=display:flex><span>            ]);
+</span></span><span style=display:flex><span>        } <span style=color:#ff79c6>catch</span> (UniqueConstraintViolationException <span style=color:#8be9fd;font-style:italic>$e</span>) {
+</span></span><span style=display:flex><span>            <span style=color:#6272a4>// Qualcun altro ha scritto prima di noi - concurrency conflict
+</span></span></span><span style=display:flex><span>            <span style=color:#ff79c6>throw</span> <span style=color:#ff79c6>new</span> ConcurrencyException(
+</span></span><span style=display:flex><span>                <span style=color:#f1fa8c>&#39;Conflitto di concorrenza: evento già presente per questa versione&#39;</span>,
+</span></span><span style=display:flex><span>                previous<span style=color:#ff79c6>:</span> <span style=color:#8be9fd;font-style:italic>$e</span>
+</span></span><span style=display:flex><span>            );
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Recupera tutti gli eventi per un aggregato, opzionalmente da una versione specifica.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * 
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * @return iterable&lt;DataObjectEvent&gt;
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getEventsForAggregate</span>(
+</span></span><span style=display:flex><span>        int <span style=color:#8be9fd;font-style:italic>$aggregateId</span>,
+</span></span><span style=display:flex><span>        int <span style=color:#8be9fd;font-style:italic>$fromVersion</span> <span style=color:#ff79c6>=</span> <span style=color:#bd93f9>0</span>,
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>?</span>int <span style=color:#8be9fd;font-style:italic>$toVersion</span> <span style=color:#ff79c6>=</span> <span style=color:#ff79c6>null</span>
+</span></span><span style=display:flex><span>    )<span style=color:#ff79c6>:</span> iterable {
+</span></span><span style=display:flex><span>        <span style=color:#8be9fd;font-style:italic>$qb</span> <span style=color:#ff79c6>=</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>connection</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>createQueryBuilder</span>()
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>select</span>(<span style=color:#f1fa8c>&#39;*&#39;</span>)
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>from</span>(self<span style=color:#ff79c6>::</span><span style=color:#50fa7b>TABLE_NAME</span>)
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>where</span>(<span style=color:#f1fa8c>&#39;aggregate_id = :aggregateId&#39;</span>)
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>andWhere</span>(<span style=color:#f1fa8c>&#39;version &gt; :fromVersion&#39;</span>)
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>setParameter</span>(<span style=color:#f1fa8c>&#39;aggregateId&#39;</span>, <span style=color:#8be9fd;font-style:italic>$aggregateId</span>)
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>setParameter</span>(<span style=color:#f1fa8c>&#39;fromVersion&#39;</span>, <span style=color:#8be9fd;font-style:italic>$fromVersion</span>)
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>orderBy</span>(<span style=color:#f1fa8c>&#39;version&#39;</span>, <span style=color:#f1fa8c>&#39;ASC&#39;</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>if</span> (<span style=color:#8be9fd;font-style:italic>$toVersion</span> <span style=color:#ff79c6>!==</span> <span style=color:#ff79c6>null</span>) {
+</span></span><span style=display:flex><span>            <span style=color:#8be9fd;font-style:italic>$qb</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>andWhere</span>(<span style=color:#f1fa8c>&#39;version &lt;= :toVersion&#39;</span>)
+</span></span><span style=display:flex><span>               <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>setParameter</span>(<span style=color:#f1fa8c>&#39;toVersion&#39;</span>, <span style=color:#8be9fd;font-style:italic>$toVersion</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#8be9fd;font-style:italic>$result</span> <span style=color:#ff79c6>=</span> <span style=color:#8be9fd;font-style:italic>$qb</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>executeQuery</span>();
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>while</span> (<span style=color:#8be9fd;font-style:italic>$row</span> <span style=color:#ff79c6>=</span> <span style=color:#8be9fd;font-style:italic>$result</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>fetchAssociative</span>()) {
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>yield</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>serializer</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>deserialize</span>(<span style=color:#8be9fd;font-style:italic>$row</span>[<span style=color:#f1fa8c>&#39;payload&#39;</span>], <span style=color:#8be9fd;font-style:italic>$row</span>[<span style=color:#f1fa8c>&#39;event_type&#39;</span>]);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Ottiene la versione corrente di un aggregato.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getCurrentVersion</span>(int <span style=color:#8be9fd;font-style:italic>$aggregateId</span>)<span style=color:#ff79c6>:</span> int
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#8be9fd;font-style:italic>$result</span> <span style=color:#ff79c6>=</span> <span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>connection</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>createQueryBuilder</span>()
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>select</span>(<span style=color:#f1fa8c>&#39;MAX(version) as max_version&#39;</span>)
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>from</span>(self<span style=color:#ff79c6>::</span><span style=color:#50fa7b>TABLE_NAME</span>)
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>where</span>(<span style=color:#f1fa8c>&#39;aggregate_id = :aggregateId&#39;</span>)
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>setParameter</span>(<span style=color:#f1fa8c>&#39;aggregateId&#39;</span>, <span style=color:#8be9fd;font-style:italic>$aggregateId</span>)
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>executeQuery</span>()
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>fetchOne</span>();
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> (int) (<span style=color:#8be9fd;font-style:italic>$result</span> <span style=color:#ff79c6>??</span> <span style=color:#bd93f9>0</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#f1fa8c>/**
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Ricostruisce lo stato di un DataObject a una versione specifica.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     * Utile per debug, audit e &#34;time travel&#34;.
+</span></span></span><span style=display:flex><span><span style=color:#f1fa8c>     */</span>
+</span></span><span style=display:flex><span>    <span style=color:#ff79c6>public</span> <span style=color:#ff79c6>function</span> <span style=color:#50fa7b>getSnapshotAtVersion</span>(int <span style=color:#8be9fd;font-style:italic>$aggregateId</span>, int <span style=color:#8be9fd;font-style:italic>$version</span>)<span style=color:#ff79c6>:</span> <span style=color:#ff79c6>array</span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#8be9fd;font-style:italic>$state</span> <span style=color:#ff79c6>=</span> [];
+</span></span><span style=display:flex><span>        
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>foreach</span> (<span style=color:#8be9fd;font-style:italic>$this</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getEventsForAggregate</span>(<span style=color:#8be9fd;font-style:italic>$aggregateId</span>, <span style=color:#bd93f9>0</span>, <span style=color:#8be9fd;font-style:italic>$version</span>) <span style=color:#ff79c6>as</span> <span style=color:#8be9fd;font-style:italic>$event</span>) {
+</span></span><span style=display:flex><span>            <span style=color:#ff79c6>if</span> (<span style=color:#8be9fd;font-style:italic>$event</span> instanceof DataObjectPropertyChanged) {
+</span></span><span style=display:flex><span>                <span style=color:#ff79c6>foreach</span> (<span style=color:#8be9fd;font-style:italic>$event</span><span style=color:#ff79c6>-&gt;</span><span style=color:#50fa7b>getChanges</span>() <span style=color:#ff79c6>as</span> <span style=color:#8be9fd;font-style:italic>$property</span> <span style=color:#ff79c6>=&gt;</span> <span style=color:#8be9fd;font-style:italic>$change</span>) {
+</span></span><span style=display:flex><span>                    <span style=color:#8be9fd;font-style:italic>$state</span>[<span style=color:#8be9fd;font-style:italic>$property</span>] <span style=color:#ff79c6>=</span> <span style=color:#8be9fd;font-style:italic>$change</span>[<span style=color:#f1fa8c>&#39;new&#39;</span>];
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#6272a4>// Gestisci altri tipi di evento...
+</span></span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        <span style=color:#ff79c6>return</span> <span style=color:#8be9fd;font-style:italic>$state</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 <strong>Tip:</strong> Per aggregati con migliaia di eventi, implementa uno snapshot store separato. Ogni N eventi (es. 100), salva uno snapshot completo e riparti da lì invece che dall&rsquo;inizio.</p></blockquote><p>Schema SQL per l&rsquo;Event Store:</p><div class=highlight><div style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><table style=border-spacing:0;padding:0;margin:0;border:0><tr><td style=vertical-align:top;padding:0;margin:0;border:0><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code></code></pre></td><td style=vertical-align:top;padding:0;margin:0;border:0;width:100%><pre tabindex=0 style=color:#f8f8f2;background-color:#282a36;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-sql data-lang=sql></code></pre></td></tr></table></div></div></div><nav class=post-nav><a class=prev href=https://cron.umbe.me/posts/2026-03-19-en-event-driven-architecture-in-pimcore-cqrs-event-sourcing/><i class=icon-arrow-left></i>Event-Driven Architecture in Pimcore: CQRS & Event Sourcing</a></nav></div><footer class=footer><p><a href=https://umbe.me>quincia
+</a>&#183;
+cron.umbe.me</p></footer></body></html>
