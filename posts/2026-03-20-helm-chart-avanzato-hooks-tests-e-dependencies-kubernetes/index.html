@@ -18,51 +18,20 @@ whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a hr
 </span></span><span class=line><span class=cl>
 </span></span><span class=line><span class=cl>kubectl version --client
 </span></span><span class=line><span class=cl><span class=c1># Client Version: v1.29.0</span>
-</span></span></code></pre></td></tr></table></div></div><h2 id=architettura-e-concetti-chiave>Architettura e Concetti Chiave</h2><p>Prima di scrivere codice, capiamo come Helm orchestra il ciclo di vita di un release e dove si inseriscono hooks, test e dependencies.</p><pre tabindex=0><code>┌─────────────────────────────────────────────────────────────────┐
-│                    Helm Release Lifecycle                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  helm install/upgrade                                            │
-│         │                                                        │
-│         ▼                                                        │
-│  ┌──────────────────┐                                           │
-│  │ Resolve          │──────┬──────┬──────┐                      │
-│  │ Dependencies     │      │      │      │                      │
-│  └────────┬─────────┘      ▼      ▼      ▼                      │
-│           │           postgresql redis rabbitmq                  │
-│           │                │      │      │                      │
-│           │                └──────┴──────┘                      │
-│           ▼                       │                              │
-│  ┌──────────────────┐            │                              │
-│  │ pre-install/     │◄───────────┘                              │
-│  │ pre-upgrade hooks│                                           │
-│  └────────┬─────────┘                                           │
-│           │                                                      │
-│           │  Hook Execution Order (by weight):                   │
-│           │  ├─ weight: -10 → DB Migration                      │
-│           │  ├─ weight:   0 → Cache Warmup                      │
-│           │  └─ weight:  10 → Notification                      │
-│           ▼                                                      │
-│  ┌──────────────────┐                                           │
-│  │ Deploy Resources │                                           │
-│  └────────┬─────────┘                                           │
-│           ▼                                                      │
-│  ┌──────────────────┐                                           │
-│  │ post-install/    │                                           │
-│  │ post-upgrade     │                                           │
-│  └────────┬─────────┘                                           │
-│           ▼                                                      │
-│  ┌──────────────────┐     ┌─────────────────┐                   │
-│  │   helm test      │────►│ Success         │                   │
-│  └────────┬─────────┘     │ Release Complete│                   │
-│           │               └─────────────────┘                   │
-│           ▼                                                      │
-│  ┌──────────────────┐                                           │
-│  │ Failure          │                                           │
-│  │ Rollback Decision│                                           │
-���  └──────────────────┘                                           │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+</span></span></code></pre></td></tr></table></div></div><h2 id=architettura-e-concetti-chiave>Architettura e Concetti Chiave</h2><p>Prima di scrivere codice, capiamo come Helm orchestra il ciclo di vita di un release e dove si inseriscono hooks, test e dependencies.</p><pre tabindex=0><code class=language-mermaid data-lang=mermaid>flowchart TD
+    A[helm install / upgrade] --&gt; B[Resolve Dependencies]
+    B --&gt; PG[postgresql]
+    B --&gt; RD[redis]
+    B --&gt; RMQ[rabbitmq]
+    PG &amp; RD &amp; RMQ --&gt; C[&#34;pre-install / pre-upgrade hooks&#34;]
+    C --&gt; H1[&#34;weight: -10 → DB Migration&#34;]
+    C --&gt; H2[&#34;weight: 0 → Cache Warmup&#34;]
+    C --&gt; H3[&#34;weight: 10 → Notification&#34;]
+    H1 &amp; H2 &amp; H3 --&gt; D[Deploy Resources]
+    D --&gt; E[&#34;post-install / post-upgrade hooks&#34;]
+    E --&gt; F{helm test}
+    F --&gt;|pass| G[✅ Release Complete]
+    F --&gt;|fail| H[❌ Rollback Decision]
 </code></pre><p><strong>Hooks</strong>: Job Kubernetes eseguiti in momenti specifici del ciclo di vita. Perfetti per migrazioni, seed data, cleanup.</p><p><strong>Tests</strong>: Pod che validano lo stato del release dopo il deploy. Helm li esegue con <code>helm test</code> e riporta successo/fallimento.</p><p><strong>Dependencies</strong>: Chart esterni che il tuo chart richiede. Helm li scarica, li configura e li installa nell&rsquo;ordine corretto.</p><h2 id=implementazione-passo-passo>Implementazione Passo-Passo</h2><h3 id=hooks-pre-install-e-pre-upgrade-per-migrazioni-database>Hooks Pre-Install e Pre-Upgrade per Migrazioni Database</h3><p>Il caso d&rsquo;uso più comune: eseguire migrazioni database prima che l&rsquo;applicazione parta. Vediamo un&rsquo;implementazione robusta con gestione errori e retry.</p><p>Struttura del chart:</p><pre tabindex=0><code>myapp/
 ├── Chart.yaml
 ├── values.yaml
