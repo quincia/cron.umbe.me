@@ -1,0 +1,880 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/posts/2026-03-20-it-architettura-event-driven-pimcore-con-symfony-messenger/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="Architettura Event-Driven Pimcore con Symfony Messenger"><meta property="og:description" content="Guida avanzata per implementare workflow asincroni in Pimcore con Symfony Messenger. Gestisci importazioni massive e operazioni distribuite senza bloccare il sistema."><meta property="og:locale" content="it"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-20T00:00:00+00:00"><meta property="article:modified_time" content="2026-03-20T00:00:00+00:00"><meta property="article:tag" content="Pimcore"><meta property="article:tag" content="Symfony-Messenger"><meta property="article:tag" content="Event-Driven-Architecture"><meta property="article:tag" content="Cms"><meta property="article:tag" content="Advanced-Tutorial"><meta property="article:tag" content="Italiano"><meta name=twitter:card content="summary"><meta name=twitter:title content="Architettura Event-Driven Pimcore con Symfony Messenger"><meta name=twitter:description content="Guida avanzata per implementare workflow asincroni in Pimcore con Symfony Messenger. Gestisci importazioni massive e operazioni distribuite senza bloccare il sistema."><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - Architettura Event-Driven Pimcore con Symfony Messenger</title><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><script defer type=text/javascript src=/minima.7e7c8d2a310a690cf80309ea4f49b7b6628d31141a4f8800e6e6165b0e5b6227.js integrity="sha256-fnyNKjEKaQz4AwnqT0m3tmKNMRQaT4gA5uYWWw5bYic="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;console.debug(theme);try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch(e){console.error(e)}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/>Home</a></li><li class="ml-2 mr-2"><a href=/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/series>Series</a></li><li class="ml-2 mr-2"><a href=/search>🔍</a></li><li class="ml-2 mr-2"><a href=/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-6">Architettura Event-Driven Pimcore con Symfony Messenger</h1><div class="mb-3 text-sm flex justify-between"><div>&mdash;</div><div><a class=ml-1 href=/tags/pimcore>#pimcore</a>
+<a class=ml-1 href=/tags/symfony-messenger>#symfony-messenger</a>
+<a class=ml-1 href=/tags/event-driven-architecture>#event-driven-architecture</a>
+<a class=ml-1 href=/tags/cms>#cms</a>
+<a class=ml-1 href=/tags/advanced-tutorial>#advanced-tutorial</a>
+<a class=ml-1 href=/tags/italiano>#italiano</a></div></div><main class=mb-8><p>Guida avanzata per implementare workflow asincroni in Pimcore con Symfony Messenger. Gestisci importazioni massive e operazioni distribuite senza bloccare il sistema.</p><article class=md><h1 id=architettura-event-driven-in-pimcore-implementare-un-sistema-di-workflow-asincrono-con-symfony-messenger>Architettura Event-Driven in Pimcore: Implementare un Sistema di Workflow Asincrono con Symfony Messenger</h1><p>Chiunque abbia gestito un&rsquo;istanza Pimcore in produzione con centinaia di migliaia di DataObjects e Assets sa cosa significa vedere l&rsquo;interfaccia admin bloccarsi durante un&rsquo;importazione massiva. O peggio, ricevere una chiamata alle 3 di notte perché il cron di sincronizzazione con l&rsquo;ERP ha saturato la memoria del server.</p><p>La soluzione non è &ldquo;comprare più RAM&rdquo;. La soluzione è ripensare l&rsquo;architettura: spostare le operazioni pesanti fuori dal ciclo request-response e orchestrarle in modo asincrono. Pimcore, essendo costruito su Symfony, ci offre Messenger come strumento nativo per farlo. Configurarlo correttamente per un contesto PIM/DAM enterprise richiede però una comprensione profonda sia di Messenger che delle peculiarità di Pimcore.</p><p>In questo articolo costruiremo un sistema di workflow asincrono completo, partendo dalla configurazione dei transport fino all&rsquo;implementazione del Saga Pattern per operazioni distribuite. Vedremo come gestire importazioni di 500.000 prodotti senza impattare gli utenti, come orchestrare la generazione di thumbnail su più worker e come implementare retry intelligenti che non trasformino un problema temporaneo in un disastro.</p><h2 id=prerequisiti>Prerequisiti</h2><ul><li>Pimcore 11.x con PHP 8.2+</li><li>Conoscenza solida di Symfony (service container, eventi, console commands)</li><li>Redis 7+ o RabbitMQ 3.12+ installato e configurato</li><li>Familiarità con i concetti di message queue (producer, consumer, acknowledgment)</li><li>Docker per l&rsquo;ambiente di sviluppo (opzionale ma consigliato)</li></ul><p>Assumo che tu abbia già un&rsquo;installazione Pimcore funzionante. Se stai partendo da zero, la documentazione ufficiale copre l&rsquo;installazione base.</p><h2 id=architettura-e-concetti-chiave>Architettura e Concetti Chiave</h2><p>Prima di scrivere codice, capiamo cosa stiamo costruendo:</p><pre tabindex=0><code>┌─────────────────────────────────────────────────────────────────────────────┐
+│                              PIMCORE APPLICATION                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────────┐     ┌──────────────────┐     ┌──────────────────────┐    │
+│  │   HTTP       │     │  Event           │     │   Message            │    │
+│  │   Request    │────▶│  Dispatcher      │────▶│   Bus                │    │
+│  └──────────────┘     └──────────────────┘     └──────────┬───────────┘    │
+│                                                            │                │
+│  ┌──────────────┐     ┌──────────────────┐                │                │
+│  │   Admin UI   │────▶│  Pimcore Events  │────────────────┤                │
+│  └──────────────┘     │  (postUpdate,    │                │                │
+│                       │   postAdd, etc)  │                │                │
+│  ┌──────────────┐     └──────────────────┘                │                │
+│  │   CLI/Cron   │─��───────────────────────────────────────┘                │
+│  └──────────────┘                                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            MESSAGE TRANSPORTS                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────────���──┐  ┌─────────────────┐  ┌─────────────────────────────┐ │
+│  │ Redis Stream    │  │ RabbitMQ        │  │ Doctrine (fallback)        │ │
+│  │ ───────────────│  │ ─────────────── │  │ ─────────────────────────  │ │
+│  │ • async_high   │  │ • async_bulk    │  │ • async_low                │ │
+│  │ • asset_proc   │  │ • sync_external │  │ (per ambienti senza Redis) │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────���───────────────────────────────────────────────────────┐
+│                              WORKER POOL                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐    │
+│  │  Worker 1   │  │  Worker 2   │  │  Worker 3   │  │  Worker N       │    │
+│  │  (high pri) │  │  (high pri) │  │  (bulk)     │  │  (asset proc)   │    │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────────┘    │
+│                                                                             │
+│                         ┌──────────────────────┐                            │
+│                         │   Dead Letter Queue  │                            │
+│                         │   + Monitoring       │                            │
+│                         └──────────────────────┘                            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+</code></pre><p>I concetti fondamentali:</p><ol><li><strong>Message</strong>: un oggetto serializzabile che rappresenta un&rsquo;operazione da eseguire (es. <code>ProcessProductImportMessage</code>)</li><li><strong>Handler</strong>: la classe che esegue l&rsquo;operazione quando il messaggio viene consumato</li><li><strong>Transport</strong>: il sistema di storage/delivery dei messaggi (Redis, RabbitMQ, Doctrine)</li><li><strong>Worker</strong>: il processo che consuma i messaggi da un transport e li passa agli handler</li><li><strong>Envelope</strong>: il wrapper che contiene il messaggio più i metadata (stamps)</li></ol><h2 id=implementazione-passo-passo>Implementazione Passo-Passo</h2><h3 id=configurazione-multi-transport-per-scenari-pimcore>Configurazione Multi-Transport per Scenari Pimcore</h3><p>La configurazione di default di Messenger non è adatta a un PIM enterprise. Dobbiamo definire transport separati per tipologie di operazioni diverse, con caratteristiche di performance e resilienza specifiche.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span><span class=lnt>62
+</span><span class=lnt>63
+</span><span class=lnt>64
+</span><span class=lnt>65
+</span><span class=lnt>66
+</span><span class=lnt>67
+</span><span class=lnt>68
+</span><span class=lnt>69
+</span><span class=lnt>70
+</span><span class=lnt>71
+</span><span class=lnt>72
+</span><span class=lnt>73
+</span><span class=lnt>74
+</span><span class=lnt>75
+</span><span class=lnt>76
+</span><span class=lnt>77
+</span><span class=lnt>78
+</span><span class=lnt>79
+</span><span class=lnt>80
+</span><span class=lnt>81
+</span><span class=lnt>82
+</span><span class=lnt>83
+</span><span class=lnt>84
+</span><span class=lnt>85
+</span><span class=lnt>86
+</span><span class=lnt>87
+</span><span class=lnt>88
+</span><span class=lnt>89
+</span><span class=lnt>90
+</span><span class=lnt>91
+</span><span class=lnt>92
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># config/packages/messenger.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>framework</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>messenger</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Serializzatore personalizzato per gestire entità Pimcore</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>default_serializer</span><span class=p>:</span><span class=w> </span><span class=l>App\Messenger\Serializer\PimcoreMessageSerializer</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Configurazione failure transport globale</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>failure_transport</span><span class=p>:</span><span class=w> </span><span class=l>failed</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>transports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Transport ad alta priorità per operazioni critiche</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Usa Redis Streams per bassa latenza</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>async_high</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(REDIS_MESSENGER_DSN)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>options</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>stream</span><span class=p>:</span><span class=w> </span><span class=l>pimcore_high_priority</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>group</span><span class=p>:</span><span class=w> </span><span class=l>pimcore_workers</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>consumer</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(HOSTNAME)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>auto_setup</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=c># Claim messaggi orfani dopo 5 minuti</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>claim_interval</span><span class=p>:</span><span class=w> </span><span class=m>300000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>retry_strategy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_retries</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>delay</span><span class=p>:</span><span class=w> </span><span class=m>1000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>multiplier</span><span class=p>:</span><span class=w> </span><span class=m>2</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_delay</span><span class=p>:</span><span class=w> </span><span class=m>30000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Transport per operazioni bulk (importazioni massive)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Usa RabbitMQ per migliore gestione della backpressure</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>async_bulk</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(RABBITMQ_MESSENGER_DSN)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>options</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>exchange</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>pimcore_bulk</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>direct</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>queues</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>pimcore_bulk_queue</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                            </span><span class=nt>binding_keys</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=l>bulk]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=c># Prefetch basso per distribuire il carico</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>prefetch_count</span><span class=p>:</span><span class=w> </span><span class=m>5</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>retry_strategy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_retries</span><span class=p>:</span><span class=w> </span><span class=m>5</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>delay</span><span class=p>:</span><span class=w> </span><span class=m>5000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>multiplier</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_delay</span><span class=p>:</span><span class=w> </span><span class=m>3600000</span><span class=w> </span><span class=c># 1 ora max tra retry</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Transport per elaborazione asset (thumbnail, video encoding)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>asset_processing</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(REDIS_MESSENGER_DSN)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>options</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>stream</span><span class=p>:</span><span class=w> </span><span class=l>pimcore_assets</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>group</span><span class=p>:</span><span class=w> </span><span class=l>asset_workers</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>consumer</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(HOSTNAME)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>retry_strategy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_retries</span><span class=p>:</span><span class=w> </span><span class=m>2</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>delay</span><span class=p>:</span><span class=w> </span><span class=m>10000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>multiplier</span><span class=p>:</span><span class=w> </span><span class=m>2</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Transport per sincronizzazione con sistemi esterni</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>sync_external</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(RABBITMQ_MESSENGER_DSN)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>options</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>exchange</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>pimcore_sync</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>topic</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>queues</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>erp_sync</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                            </span><span class=nt>binding_keys</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s1>&#39;sync.erp.*&#39;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>ecommerce_sync</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                            </span><span class=nt>binding_keys</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s1>&#39;sync.ecommerce.*&#39;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>retry_strategy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_retries</span><span class=p>:</span><span class=w> </span><span class=m>10</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>delay</span><span class=p>:</span><span class=w> </span><span class=m>60000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>multiplier</span><span class=p>:</span><span class=w> </span><span class=m>2</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_delay</span><span class=p>:</span><span class=w> </span><span class=m>7200000</span><span class=w> </span><span class=c># 2 ore max</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Dead letter queue per messaggi falliti</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>failed</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;doctrine://default?queue_name=failed_messages&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Transport sincrono per test</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>sync</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;sync://&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>routing</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Routing basato sulla classe del messaggio</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>&#39;App\Message\HighPriority\*&#39;</span><span class=p>:</span><span class=w> </span><span class=l>async_high</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>&#39;App\Message\Bulk\*&#39;</span><span class=p>:</span><span class=w> </span><span class=l>async_bulk</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>&#39;App\Message\Asset\*&#39;</span><span class=p>:</span><span class=w> </span><span class=l>asset_processing</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>&#39;App\Message\Sync\*&#39;</span><span class=p>:</span><span class=w> </span><span class=l>sync_external</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Default per messaggi non categorizzati</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>&#39;*&#39;</span><span class=p>:</span><span class=w> </span><span class=l>async_high</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ <strong>Attenzione</strong>: non usare mai <code>sync://</code> in produzione per operazioni pesanti. È utile solo per test e debugging.</p></blockquote><blockquote><p>💡 <strong>Suggerimento</strong>: il <code>claim_interval</code> di Redis Streams è fondamentale. Se un worker crasha, i messaggi &ldquo;pending&rdquo; vengono reclamati da altri worker dopo questo intervallo. Impostalo in base al tempo massimo previsto per l&rsquo;elaborazione di un messaggio.</p></blockquote><p>Configurazione delle variabili d&rsquo;ambiente:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># .env.local</span>
+</span></span><span class=line><span class=cl><span class=nv>REDIS_MESSENGER_DSN</span><span class=o>=</span>redis://localhost:6379/messages?serializer<span class=o>=</span><span class=m>1</span>
+</span></span><span class=line><span class=cl><span class=nv>RABBITMQ_MESSENGER_DSN</span><span class=o>=</span>amqp://guest:guest@localhost:5672/%2f/messages
+</span></span></code></pre></td></tr></table></div></div><h3 id=event-subscribers-per-intercettare-operazioni-crud>Event Subscribers per Intercettare Operazioni CRUD</h3><p>Il cuore di un sistema event-driven in Pimcore sono gli Event Subscribers che reagiscono alle operazioni su DataObjects e Assets. L&rsquo;obiettivo è intercettare le modifiche e dispatchare messaggi invece di eseguire operazioni sincrone.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span><span class=lnt>142
+</span><span class=lnt>143
+</span><span class=lnt>144
+</span><span class=lnt>145
+</span><span class=lnt>146
+</span><span class=lnt>147
+</span><span class=lnt>148
+</span><span class=lnt>149
+</span><span class=lnt>150
+</span><span class=lnt>151
+</span><span class=lnt>152
+</span><span class=lnt>153
+</span><span class=lnt>154
+</span><span class=lnt>155
+</span><span class=lnt>156
+</span><span class=lnt>157
+</span><span class=lnt>158
+</span><span class=lnt>159
+</span><span class=lnt>160
+</span><span class=lnt>161
+</span><span class=lnt>162
+</span><span class=lnt>163
+</span><span class=lnt>164
+</span><span class=lnt>165
+</span><span class=lnt>166
+</span><span class=lnt>167
+</span><span class=lnt>168
+</span><span class=lnt>169
+</span><span class=lnt>170
+</span><span class=lnt>171
+</span><span class=lnt>172
+</span><span class=lnt>173
+</span><span class=lnt>174
+</span><span class=lnt>175
+</span><span class=lnt>176
+</span><span class=lnt>177
+</span><span class=lnt>178
+</span><span class=lnt>179
+</span><span class=lnt>180
+</span><span class=lnt>181
+</span><span class=lnt>182
+</span><span class=lnt>183
+</span><span class=lnt>184
+</span><span class=lnt>185
+</span><span class=lnt>186
+</span><span class=lnt>187
+</span><span class=lnt>188
+</span><span class=lnt>189
+</span><span class=lnt>190
+</span><span class=lnt>191
+</span><span class=lnt>192
+</span><span class=lnt>193
+</span><span class=lnt>194
+</span><span class=lnt>195
+</span><span class=lnt>196
+</span><span class=lnt>197
+</span><span class=lnt>198
+</span><span class=lnt>199
+</span><span class=lnt>200
+</span><span class=lnt>201
+</span><span class=lnt>202
+</span><span class=lnt>203
+</span><span class=lnt>204
+</span><span class=lnt>205
+</span><span class=lnt>206
+</span><span class=lnt>207
+</span><span class=lnt>208
+</span><span class=lnt>209
+</span><span class=lnt>210
+</span><span class=lnt>211
+</span><span class=lnt>212
+</span><span class=lnt>213
+</span><span class=lnt>214
+</span><span class=lnt>215
+</span><span class=lnt>216
+</span><span class=lnt>217
+</span><span class=lnt>218
+</span><span class=lnt>219
+</span><span class=lnt>220
+</span><span class=lnt>221
+</span><span class=lnt>222
+</span><span class=lnt>223
+</span><span class=lnt>224
+</span><span class=lnt>225
+</span><span class=lnt>226
+</span><span class=lnt>227
+</span><span class=lnt>228
+</span><span class=lnt>229
+</span><span class=lnt>230
+</span><span class=lnt>231
+</span><span class=lnt>232
+</span><span class=lnt>233
+</span><span class=lnt>234
+</span><span class=lnt>235
+</span><span class=lnt>236
+</span><span class=lnt>237
+</span><span class=lnt>238
+</span><span class=lnt>239
+</span><span class=lnt>240
+</span><span class=lnt>241
+</span><span class=lnt>242
+</span><span class=lnt>243
+</span><span class=lnt>244
+</span><span class=lnt>245
+</span><span class=lnt>246
+</span><span class=lnt>247
+</span><span class=lnt>248
+</span><span class=lnt>249
+</span><span class=lnt>250
+</span><span class=lnt>251
+</span><span class=lnt>252
+</span><span class=lnt>253
+</span><span class=lnt>254
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl><span class=c1>// src/EventSubscriber/DataObjectEventSubscriber.php
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>declare</span><span class=p>(</span><span class=nx>strict_types</span><span class=o>=</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\EventSubscriber</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Message\Bulk\ReindexProductMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Message\Bulk\ResyncCategoryProductsMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Message\HighPriority\InvalidateCacheMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Message\Sync\SyncToErpMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Message\Sync\SyncToEcommerceMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Pimcore\Event\DataObjectEvents</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Pimcore\Event\Model\DataObjectEvent</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Pimcore\Model\DataObject\AbstractObject</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Pimcore\Model\DataObject\Product</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Pimcore\Model\DataObject\Category</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Psr\Log\LoggerInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\EventDispatcher\EventSubscriberInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Messenger\MessageBusInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Messenger\Stamp\DelayStamp</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Messenger\Stamp\TransportNamesStamp</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>final</span> <span class=k>class</span> <span class=nc>DataObjectEventSubscriber</span> <span class=k>implements</span> <span class=nx>EventSubscriberInterface</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=c1>// Flag per prevenire loop infiniti durante operazioni batch
+</span></span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>static</span> <span class=nx>bool</span> <span class=nv>$processingBatch</span> <span class=o>=</span> <span class=k>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=fm>__construct</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>MessageBusInterface</span> <span class=nv>$messageBus</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>LoggerInterface</span> <span class=nv>$logger</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>static</span> <span class=k>function</span> <span class=nf>getSubscribedEvents</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>            <span class=nx>DataObjectEvents</span><span class=o>::</span><span class=na>POST_UPDATE</span> <span class=o>=&gt;</span> <span class=p>[</span><span class=s1>&#39;onPostUpdate&#39;</span><span class=p>,</span> <span class=mi>0</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>            <span class=nx>DataObjectEvents</span><span class=o>::</span><span class=na>POST_ADD</span> <span class=o>=&gt;</span> <span class=p>[</span><span class=s1>&#39;onPostAdd&#39;</span><span class=p>,</span> <span class=mi>0</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>            <span class=nx>DataObjectEvents</span><span class=o>::</span><span class=na>POST_DELETE</span> <span class=o>=&gt;</span> <span class=p>[</span><span class=s1>&#39;onPostDelete&#39;</span><span class=p>,</span> <span class=mi>0</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>            <span class=c1>// Evento custom per fine batch
+</span></span></span><span class=line><span class=cl>            <span class=s1>&#39;pimcore.dataobject.batch.complete&#39;</span> <span class=o>=&gt;</span> <span class=p>[</span><span class=s1>&#39;onBatchComplete&#39;</span><span class=p>,</span> <span class=o>-</span><span class=mi>100</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>        <span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>onPostUpdate</span><span class=p>(</span><span class=nx>DataObjectEvent</span> <span class=nv>$event</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$object</span> <span class=o>=</span> <span class=nv>$event</span><span class=o>-&gt;</span><span class=na>getObject</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Ignora se siamo dentro un&#39;operazione batch o se è una versione draft
+</span></span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nx>self</span><span class=o>::</span><span class=nv>$processingBatch</span> <span class=o>||</span> <span class=o>!</span><span class=nv>$object</span><span class=o>-&gt;</span><span class=na>isPublished</span><span class=p>())</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Ignora modifiche automatiche da Pimcore (es. saveVersion internals)
+</span></span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$this</span><span class=o>-&gt;</span><span class=na>isInternalUpdate</span><span class=p>(</span><span class=nv>$event</span><span class=p>))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>dispatchForObject</span><span class=p>(</span><span class=nv>$object</span><span class=p>,</span> <span class=s1>&#39;update&#39;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>onPostAdd</span><span class=p>(</span><span class=nx>DataObjectEvent</span> <span class=nv>$event</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$object</span> <span class=o>=</span> <span class=nv>$event</span><span class=o>-&gt;</span><span class=na>getObject</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nx>self</span><span class=o>::</span><span class=nv>$processingBatch</span> <span class=o>||</span> <span class=o>!</span><span class=nv>$object</span><span class=o>-&gt;</span><span class=na>isPublished</span><span class=p>())</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>dispatchForObject</span><span class=p>(</span><span class=nv>$object</span><span class=p>,</span> <span class=s1>&#39;create&#39;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>onPostDelete</span><span class=p>(</span><span class=nx>DataObjectEvent</span> <span class=nv>$event</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$object</span> <span class=o>=</span> <span class=nv>$event</span><span class=o>-&gt;</span><span class=na>getObject</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Per delete processiamo anche se siamo in batch,
+</span></span></span><span class=line><span class=cl>        <span class=c1>// ma con priorità diversa
+</span></span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>dispatchForObject</span><span class=p>(</span><span class=nv>$object</span><span class=p>,</span> <span class=s1>&#39;delete&#39;</span><span class=p>,</span> <span class=nx>self</span><span class=o>::</span><span class=nv>$processingBatch</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>onBatchComplete</span><span class=p>()</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nx>self</span><span class=o>::</span><span class=nv>$processingBatch</span> <span class=o>=</span> <span class=k>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>dispatchForObject</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=nx>AbstractObject</span> <span class=nv>$object</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>        <span class=nx>string</span> <span class=nv>$operation</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=nx>bool</span> <span class=nv>$lowPriority</span> <span class=o>=</span> <span class=k>false</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span><span class=o>:</span> <span class=nx>void</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$objectId</span> <span class=o>=</span> <span class=nv>$object</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$className</span> <span class=o>=</span> <span class=nv>$object</span><span class=o>-&gt;</span><span class=na>getClassName</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>info</span><span class=p>(</span><span class=s1>&#39;Dispatching messages for object&#39;</span><span class=p>,</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;id&#39;</span> <span class=o>=&gt;</span> <span class=nv>$objectId</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;class&#39;</span> <span class=o>=&gt;</span> <span class=nv>$className</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;operation&#39;</span> <span class=o>=&gt;</span> <span class=nv>$operation</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>]);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Strategia di dispatch basata sul tipo di oggetto
+</span></span></span><span class=line><span class=cl>        <span class=nx>match</span> <span class=p>(</span><span class=k>true</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$object</span> <span class=nx>instanceof</span> <span class=nx>Product</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>handleProductChange</span><span class=p>(</span><span class=nv>$object</span><span class=p>,</span> <span class=nv>$operation</span><span class=p>,</span> <span class=nv>$lowPriority</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$object</span> <span class=nx>instanceof</span> <span class=nx>Category</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>handleCategoryChange</span><span class=p>(</span><span class=nv>$object</span><span class=p>,</span> <span class=nv>$operation</span><span class=p>,</span> <span class=nv>$lowPriority</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=k>default</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>handleGenericChange</span><span class=p>(</span><span class=nv>$object</span><span class=p>,</span> <span class=nv>$operation</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=p>};</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>handleProductChange</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=nx>Product</span> <span class=nv>$product</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>        <span class=nx>string</span> <span class=nv>$operation</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=nx>bool</span> <span class=nv>$lowPriority</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span><span class=o>:</span> <span class=nx>void</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$stamps</span> <span class=o>=</span> <span class=p>[];</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// In low priority (durante batch), aggiungiamo delay per non sovraccaricare
+</span></span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$lowPriority</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$stamps</span><span class=p>[]</span> <span class=o>=</span> <span class=k>new</span> <span class=nx>DelayStamp</span><span class=p>(</span><span class=mi>5000</span><span class=p>);</span> <span class=c1>// 5 secondi di delay
+</span></span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// 1. Invalida cache immediatamente (alta priorità)
+</span></span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>messageBus</span><span class=o>-&gt;</span><span class=na>dispatch</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=k>new</span> <span class=nx>InvalidateCacheMessage</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=nx>objectId</span><span class=o>:</span> <span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=nx>objectType</span><span class=o>:</span> <span class=s1>&#39;Product&#39;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=nx>cacheKeys</span><span class=o>:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>buildCacheKeys</span><span class=p>(</span><span class=nv>$product</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=p>[</span><span class=k>new</span> <span class=nx>TransportNamesStamp</span><span class=p>([</span><span class=s1>&#39;async_high&#39;</span><span class=p>])]</span>
+</span></span><span class=line><span class=cl>        <span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// 2. Reindicizza per search (può aspettare)
+</span></span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>messageBus</span><span class=o>-&gt;</span><span class=na>dispatch</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=k>new</span> <span class=nx>ReindexProductMessage</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=nx>productId</span><span class=o>:</span> <span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=nx>operation</span><span class=o>:</span> <span class=nv>$operation</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=nx>changedFields</span><span class=o>:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>detectChangedFields</span><span class=p>(</span><span class=nv>$product</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=nx>array_merge</span><span class=p>(</span><span class=nv>$stamps</span><span class=p>,</span> <span class=p>[</span><span class=k>new</span> <span class=nx>TransportNamesStamp</span><span class=p>([</span><span class=s1>&#39;async_bulk&#39;</span><span class=p>])])</span>
+</span></span><span class=line><span class=cl>        <span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// 3. Sincronizza con ERP (se configurato e non in delete)
+</span></span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$operation</span> <span class=o>!==</span> <span class=s1>&#39;delete&#39;</span> <span class=o>&amp;&amp;</span> <span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getSyncToErp</span><span class=p>())</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>messageBus</span><span class=o>-&gt;</span><span class=na>dispatch</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=k>new</span> <span class=nx>SyncToErpMessage</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                    <span class=nx>productId</span><span class=o>:</span> <span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                    <span class=nx>sku</span><span class=o>:</span> <span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getSku</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                    <span class=nx>operation</span><span class=o>:</span> <span class=nv>$operation</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=p>),</span>
+</span></span><span class=line><span class=cl>                <span class=p>[</span><span class=k>new</span> <span class=nx>TransportNamesStamp</span><span class=p>([</span><span class=s1>&#39;sync_external&#39;</span><span class=p>])]</span>
+</span></span><span class=line><span class=cl>            <span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// 4. Sincronizza con e-commerce
+</span></span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getPublishToWeb</span><span class=p>())</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>messageBus</span><span class=o>-&gt;</span><span class=na>dispatch</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=k>new</span> <span class=nx>SyncToEcommerceMessage</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                    <span class=nx>productId</span><span class=o>:</span> <span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                    <span class=nx>channels</span><span class=o>:</span> <span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getSalesChannels</span><span class=p>()</span> <span class=o>??</span> <span class=p>[</span><span class=s1>&#39;default&#39;</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>                    <span class=nx>operation</span><span class=o>:</span> <span class=nv>$operation</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=p>),</span>
+</span></span><span class=line><span class=cl>                <span class=p>[</span>
+</span></span><span class=line><span class=cl>                    <span class=k>new</span> <span class=nx>TransportNamesStamp</span><span class=p>([</span><span class=s1>&#39;sync_external&#39;</span><span class=p>]),</span>
+</span></span><span class=line><span class=cl>                    <span class=c1>// Delay per dare tempo alla cache di invalidarsi
+</span></span></span><span class=line><span class=cl>                    <span class=k>new</span> <span class=nx>DelayStamp</span><span class=p>(</span><span class=mi>2000</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>                <span class=p>]</span>
+</span></span><span class=line><span class=cl>            <span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>handleCategoryChange</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=nx>Category</span> <span class=nv>$category</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>        <span class=nx>string</span> <span class=nv>$operation</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>        <span class=nx>bool</span> <span class=nv>$lowPriority</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span><span class=o>:</span> <span class=nx>void</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// Una modifica categoria impatta tutti i prodotti figli
+</span></span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>messageBus</span><span class=o>-&gt;</span><span class=na>dispatch</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=k>new</span> <span class=nx>InvalidateCacheMessage</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=nx>objectId</span><span class=o>:</span> <span class=nv>$category</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=nx>objectType</span><span class=o>:</span> <span class=s1>&#39;Category&#39;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=nx>cacheKeys</span><span class=o>:</span> <span class=p>[</span><span class=s2>&#34;category_</span><span class=si>{</span><span class=nv>$category</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>()</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>,</span> <span class=s2>&#34;category_tree&#34;</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>                <span class=nx>propagateToChildren</span><span class=o>:</span> <span class=k>true</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Per operazioni su categorie, schedula re-sync di tutti i prodotti
+</span></span></span><span class=line><span class=cl>        <span class=c1>// con delay significativo per evitare thundering herd
+</span></span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$operation</span> <span class=o>===</span> <span class=s1>&#39;update&#39;</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>messageBus</span><span class=o>-&gt;</span><span class=na>dispatch</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=k>new</span> <span class=nx>ResyncCategoryProductsMessage</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                    <span class=nx>categoryId</span><span class=o>:</span> <span class=nv>$category</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                    <span class=nx>recursive</span><span class=o>:</span> <span class=k>true</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=p>),</span>
+</span></span><span class=line><span class=cl>                <span class=p>[</span>
+</span></span><span class=line><span class=cl>                    <span class=k>new</span> <span class=nx>TransportNamesStamp</span><span class=p>([</span><span class=s1>&#39;async_bulk&#39;</span><span class=p>]),</span>
+</span></span><span class=line><span class=cl>                    <span class=k>new</span> <span class=nx>DelayStamp</span><span class=p>(</span><span class=mi>30000</span><span class=p>),</span> <span class=c1>// 30 secondi
+</span></span></span><span class=line><span class=cl>                <span class=p>]</span>
+</span></span><span class=line><span class=cl>            <span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>handleGenericChange</span><span class=p>(</span><span class=nx>AbstractObject</span> <span class=nv>$object</span><span class=p>,</span> <span class=nx>string</span> <span class=nv>$operation</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// Fallback per altri tipi di oggetto
+</span></span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>messageBus</span><span class=o>-&gt;</span><span class=na>dispatch</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=k>new</span> <span class=nx>InvalidateCacheMessage</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=nx>objectId</span><span class=o>:</span> <span class=nv>$object</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=nx>objectType</span><span class=o>:</span> <span class=nv>$object</span><span class=o>-&gt;</span><span class=na>getClassName</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=nx>cacheKeys</span><span class=o>:</span> <span class=p>[</span><span class=nx>strtolower</span><span class=p>(</span><span class=nv>$object</span><span class=o>-&gt;</span><span class=na>getClassName</span><span class=p>())</span> <span class=o>.</span> <span class=s2>&#34;_</span><span class=si>{</span><span class=nv>$object</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>()</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>            <span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=sd>/**
+</span></span></span><span class=line><span class=cl><span class=sd>     * Abilita modalità batch per importazioni massive.
+</span></span></span><span class=line><span class=cl><span class=sd>     * Chiamato esternamente prima di operazioni bulk.
+</span></span></span><span class=line><span class=cl><span class=sd>     */</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>static</span> <span class=k>function</span> <span class=nf>enableBatchMode</span><span class=p>()</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nx>self</span><span class=o>::</span><span class=nv>$processingBatch</span> <span class=o>=</span> <span class=k>true</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>static</span> <span class=k>function</span> <span class=nf>disableBatchMode</span><span class=p>()</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nx>self</span><span class=o>::</span><span class=nv>$processingBatch</span> <span class=o>=</span> <span class=k>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>isInternalUpdate</span><span class=p>(</span><span class=nx>DataObjectEvent</span> <span class=nv>$event</span><span class=p>)</span><span class=o>:</span> <span class=nx>bool</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$arguments</span> <span class=o>=</span> <span class=nv>$event</span><span class=o>-&gt;</span><span class=na>getArguments</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nx>isset</span><span class=p>(</span><span class=nv>$arguments</span><span class=p>[</span><span class=s1>&#39;isAutoSave&#39;</span><span class=p>])</span> <span class=o>&amp;&amp;</span> <span class=nv>$arguments</span><span class=p>[</span><span class=s1>&#39;isAutoSave&#39;</span><span class=p>]</span> <span class=o>===</span> <span class=k>true</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>buildCacheKeys</span><span class=p>(</span><span class=nx>Product</span> <span class=nv>$product</span><span class=p>)</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$keys</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>            <span class=s2>&#34;product_</span><span class=si>{</span><span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>()</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s2>&#34;product_sku_</span><span class=si>{</span><span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getSku</span><span class=p>()</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>];</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Aggiungi chiavi per categorie associate
+</span></span></span><span class=line><span class=cl>        <span class=k>foreach</span> <span class=p>(</span><span class=nv>$product</span><span class=o>-&gt;</span><span class=na>getCategories</span><span class=p>()</span> <span class=o>??</span> <span class=p>[]</span> <span class=k>as</span> <span class=nv>$category</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$keys</span><span class=p>[]</span> <span class=o>=</span> <span class=s2>&#34;category_</span><span class=si>{</span><span class=nv>$category</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>()</span><span class=si>}</span><span class=s2>_products&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$keys</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>detectChangedFields</span><span class=p>(</span><span class=nx>Product</span> <span class=nv>$product</span><span class=p>)</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// Pimcore mantiene i valori originali in memoria.
+</span></span></span><span class=line><span class=cl>        <span class=c1>// In produzione useresti un servizio dedicato che traccia le modifiche.
+</span></span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=p>[];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>📝 <strong>Nota</strong>: il flag <code>$processingBatch</code> è statico intenzionalmente. Durante importazioni massive, vogliamo prevenire la generazione di migliaia di messaggi individuali. Alla fine del batch, genereremo un singolo messaggio di &ldquo;reconciliation&rdquo;.</p></blockquote><p>Ecco un esempio di messaggio ben strutturato:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl><span class=c1>// src/Message/Sync/SyncToErpMessage.php
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>declare</span><span class=p>(</span><span class=nx>strict_types</span><span class=o>=</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\Message\Sync</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>DateTimeImmutable</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=sd>/**
+</span></span></span><span class=line><span class=cl><span class=sd> * Messaggio per sincronizzazione prodotto verso ERP.
+</span></span></span><span class=line><span class=cl><span class=sd> * 
+</span></span></span><span class=line><span class=cl><span class=sd> * Immutabile e serializzabile. Contiene solo ID e dati
+</span></span></span><span class=line><span class=cl><span class=sd> * necessari per identificare l&#39;operazione, non l&#39;intero oggetto.
+</span></span></span><span class=line><span class=cl><span class=sd> */</span>
+</span></span><span class=line><span class=cl><span class=k>final</span> <span class=nx>readonly</span> <span class=k>class</span> <span class=nc>SyncToErpMessage</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=fm>__construct</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=k>public</span> <span class=nx>int</span> <span class=nv>$productId</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>public</span> <span class=nx>string</span> <span class=nv>$sku</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>public</span> <span class=nx>string</span> <span class=nv>$operation</span><span class=p>,</span> <span class=c1>// &#39;create&#39;, &#39;update&#39;, &#39;delete&#39;
+</span></span></span><span class=line><span class=cl>        <span class=k>public</span> <span class=o>?</span><span class=nx>string</span> <span class=nv>$correlationId</span> <span class=o>=</span> <span class=k>null</span><span class=p>,</span> <span class=c1>// Per tracciare saga
+</span></span></span><span class=line><span class=cl>        <span class=k>public</span> <span class=nx>int</span> <span class=nv>$retryCount</span> <span class=o>=</span> <span class=mi>0</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>public</span> <span class=o>?</span><span class=nx>DateTimeImmutable</span> <span class=nv>$originalTimestamp</span> <span class=o>=</span> <span class=k>null</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=sd>/**
+</span></span></span><span class=line><span class=cl><span class=sd>     * Factory per creare messaggio di retry con contesto preservato.
+</span></span></span><span class=line><span class=cl><span class=sd>     */</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>forRetry</span><span class=p>()</span><span class=o>:</span> <span class=nx>self</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=k>new</span> <span class=nx>self</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=nx>productId</span><span class=o>:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>productId</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=nx>sku</span><span class=o>:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>sku</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=nx>operation</span><span class=o>:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>operation</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=nx>correlationId</span><span class=o>:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>correlationId</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=nx>retryCount</span><span class=o>:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>retryCount</span> <span class=o>+</span> <span class=mi>1</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=nx>originalTimestamp</span><span class=o>:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>originalTimestamp</span> <span class=o>??</span> <span class=k>new</span> <span class=nx>DateTimeImmutable</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>        <span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=sd>/**
+</span></span></span><span class=line><span class=cl><span class=sd>     * Identifica univocamente questa operazione per deduplicazione.
+</span></span></span><span class=line><span class=cl><span class=sd>     */</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getDeduplicationKey</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nx>sprintf</span><span class=p>(</span><span class=s1>&#39;erp_sync_%s_%s&#39;</span><span class=p>,</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>sku</span><span class=p>,</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>operation</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><h3 id=saga-pattern-per-workflow-complessi>Saga Pattern per Workflow Complessi</h3><p>Le operazioni reali in un PIM/DAM non sono mai atomiche. Un&rsquo;importazione prodotto tipica coinvolge: creazione DataObject, upload asset, generazione thumbnail, sincronizzazione multi-canale, indicizzazione search. Se uno step fallisce a metà, dobbiamo gestire il rollback.</p><p>Il Saga Pattern ci permette di orchestrare queste operazioni come una sequenza di step con compensating transactions.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl><span class=c1>// src/Saga/ProductPublishSaga.php
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>declare</span><span class=p>(</span><span class=nx>strict_types</span><span class=o>=</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\Saga</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Message\Asset\GenerateThumbnailsMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Message\Bulk\ReindexProductMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Message\Sync\SyncToEcommerceMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Saga\State\ProductPublishState</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Psr\Log\LoggerInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony</span>
+</span></span></code></pre></td></tr></table></div></div></article></main></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.158.0
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>

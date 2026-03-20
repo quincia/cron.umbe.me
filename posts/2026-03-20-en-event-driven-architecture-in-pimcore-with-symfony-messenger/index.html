@@ -1,0 +1,1094 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/posts/2026-03-20-en-event-driven-architecture-in-pimcore-with-symfony-messenger/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="Event-Driven Architecture in Pimcore with Symfony Messenger"><meta property="og:description" content="Build production-grade async workflows in Pimcore 11 using Symfony Messenger. Multi-transport config, resilience patterns, and PIM/DAM orchestration."><meta property="og:locale" content="it"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-20T00:00:00+00:00"><meta property="article:modified_time" content="2026-03-20T00:00:00+00:00"><meta property="article:tag" content="Pimcore"><meta property="article:tag" content="Symfony-Messenger"><meta property="article:tag" content="Event-Driven-Architecture"><meta property="article:tag" content="Cms"><meta property="article:tag" content="Advanced-Tutorial"><meta property="article:tag" content="English"><meta name=twitter:card content="summary"><meta name=twitter:title content="Event-Driven Architecture in Pimcore with Symfony Messenger"><meta name=twitter:description content="Build production-grade async workflows in Pimcore 11 using Symfony Messenger. Multi-transport config, resilience patterns, and PIM/DAM orchestration."><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - Event-Driven Architecture in Pimcore with Symfony Messenger</title><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><script defer type=text/javascript src=/minima.7e7c8d2a310a690cf80309ea4f49b7b6628d31141a4f8800e6e6165b0e5b6227.js integrity="sha256-fnyNKjEKaQz4AwnqT0m3tmKNMRQaT4gA5uYWWw5bYic="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;console.debug(theme);try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch(e){console.error(e)}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/>Home</a></li><li class="ml-2 mr-2"><a href=/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/series>Series</a></li><li class="ml-2 mr-2"><a href=/search>🔍</a></li><li class="ml-2 mr-2"><a href=/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-6">Event-Driven Architecture in Pimcore with Symfony Messenger</h1><div class="mb-3 text-sm flex justify-between"><div>&mdash;</div><div><a class=ml-1 href=/tags/pimcore>#pimcore</a>
+<a class=ml-1 href=/tags/symfony-messenger>#symfony-messenger</a>
+<a class=ml-1 href=/tags/event-driven-architecture>#event-driven-architecture</a>
+<a class=ml-1 href=/tags/cms>#cms</a>
+<a class=ml-1 href=/tags/advanced-tutorial>#advanced-tutorial</a>
+<a class=ml-1 href=/tags/english>#english</a></div></div><main class=mb-8><p>Build production-grade async workflows in Pimcore 11 using Symfony Messenger. Multi-transport config, resilience patterns, and PIM/DAM orchestration.</p><article class=md><h1 id=event-driven-architecture-in-pimcore-building-asynchronous-workflow-systems-with-symfony-messenger>Event-Driven Architecture in Pimcore: Building Asynchronous Workflow Systems with Symfony Messenger</h1><p>Every Pimcore developer eventually hits the same wall. You&rsquo;re importing 50,000 products from an ERP, generating thumbnails for 10,000 assets, or synchronizing data across five e-commerce channels—and the admin interface becomes unresponsive. Users stare at spinning loaders. Timeouts kill long-running operations. The system feels brittle.</p><p>The solution isn&rsquo;t faster hardware. It&rsquo;s architectural: decouple the triggering of operations from their execution. This is where event-driven architecture shines, and Pimcore&rsquo;s native integration with Symfony Messenger provides the foundation to build it properly.</p><p>This article walks through building production-grade asynchronous workflows in Pimcore. We&rsquo;ll cover multi-transport configuration, custom event subscribers, resilience patterns, and orchestration strategies for complex PIM/DAM operations. By the end, you&rsquo;ll have a blueprint for handling massive data operations without blocking users or risking data inconsistency.</p><h2 id=prerequisites>Prerequisites</h2><p>To follow along, you&rsquo;ll need:</p><ul><li>Pimcore 11.x with Symfony 6.4+</li><li>Working knowledge of Symfony services and dependency injection</li><li>A message broker installed (Redis or RabbitMQ—we&rsquo;ll cover both)</li><li>Supervisor or systemd for worker process management</li><li>Basic understanding of event-driven concepts</li></ul><p>Your development environment should have:</p><ul><li>PHP 8.2+ with the appropriate extensions (<code>redis</code>, <code>amqp</code>)</li><li>Composer for dependency management</li><li>Access to Pimcore&rsquo;s console commands</li></ul><h2 id=architecture-and-key-concepts>Architecture and Key Concepts</h2><p>Before diving into code, let&rsquo;s establish the architecture we&rsquo;re building:</p><pre tabindex=0><code>┌─────────────────────────────────────────────────────────────────────────────┐
+│                           PIMCORE APPLICATION                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────┐    ┌──────────────────┐    ┌────────────────────────────┐ │
+│  │   Admin UI   │    │   Event System   │    │    Symfony Messenger       │ │
+��  │   API Call   │───▶│   Subscribers    │───▶│    Message Bus             │ │
+│  │   CLI Import │    │                  │    │                            │ │
+│  └──────────────┘    └──────────────────┘    └─────────────┬──────────────┘ │
+│                                                             │                │
+└─────────────────────────────────────────────────────────────┼────────────────┘
+                                                              │
+                    ┌─────────────────────────────────────────┼─────────────────┐
+                    │              MESSAGE TRANSPORTS          │                 │
+                    ├─────────────────────────────────────────┼─────────────────┤
+                    │                                         ▼                 │
+                    │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐       │
+                    │  │   Redis     │  │  RabbitMQ   │  │  Doctrine   │       │
+                    │  │  (fast ops) │  │ (reliable)  │  │  (fallback) │       │
+                    │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘       │
+                    │         │                │                │              │
+                    └─────────┼────────────────┼────────────────┼──────────────┘
+                              │                │                │
+                              ▼                ▼                ▼
+                    ┌─────────────────────────────────────────────────────────┐
+                    │                    WORKER PROCESSES                      │
+                    ├─────────────────────────────────────────────────────────┤
+                    │  ┌───────────────┐  ┌───────────────┐  ┌─────────────┐  │
+                    │  │ Asset Worker  │  │ Import Worker │  │ Sync Worker │  │
+                    │  │ (thumbnails)  │  │ (bulk data)   │  │ (channels)  │  │
+                    │  └───────┬───────┘  └───────┬───────┘  └──────┬──────┘  │
+                    │          │                  │                 │         │
+                    └──────────┼──────────────────┼─────────────────┼─────────┘
+                               │                  │                 │
+                               ▼                  ▼                 ▼
+                    ┌─────────────────────────────────────────────────────────┐
+                    │                  PIMCORE DATA LAYER                      │
+                    │         DataObjects  │  Assets  │  Documents            │
+                    └─────────────────────────────────────────────────────────┘
+</code></pre><p>The key insight: Pimcore fires events for virtually every operation. We intercept those events, dispatch lightweight message objects to queues, and dedicated worker processes handle the heavy lifting asynchronously.</p><h2 id=step-by-step-implementation>Step-by-Step Implementation</h2><h3 id=configuring-multi-transport-messenger-infrastructure>Configuring Multi-Transport Messenger Infrastructure</h3><p>Pimcore inherits Symfony&rsquo;s Messenger component, but production systems need careful transport configuration. Different operations have different reliability and performance requirements.</p><p>Create or update <code>config/packages/messenger.yaml</code>:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span><span class=lnt>62
+</span><span class=lnt>63
+</span><span class=lnt>64
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>framework</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>messenger</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Failure handling - critical for production resilience</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>failure_transport</span><span class=p>:</span><span class=w> </span><span class=l>failed</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Define multiple transports for different workload types</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>transports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># High-throughput, low-latency operations (thumbnail generation, cache warming)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>async_fast</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(MESSENGER_TRANSPORT_DSN_REDIS)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>options</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>stream</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;pimcore_fast&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>group</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;pimcore_workers&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>consumer</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;fast_%env(HOSTNAME)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>auto_setup</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>retry_strategy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_retries</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>delay</span><span class=p>:</span><span class=w> </span><span class=m>1000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>multiplier</span><span class=p>:</span><span class=w> </span><span class=m>2</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_delay</span><span class=p>:</span><span class=w> </span><span class=m>10000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Reliable delivery for critical business operations</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>async_reliable</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(MESSENGER_TRANSPORT_DSN_AMQP)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>options</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>exchange</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;pimcore_reliable&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>direct</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>queues</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>pimcore_imports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                            </span><span class=nt>binding_keys</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s1>&#39;import&#39;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                        </span><span class=nt>pimcore_sync</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                            </span><span class=nt>binding_keys</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s1>&#39;sync&#39;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>retry_strategy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_retries</span><span class=p>:</span><span class=w> </span><span class=m>5</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>delay</span><span class=p>:</span><span class=w> </span><span class=m>5000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>multiplier</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_delay</span><span class=p>:</span><span class=w> </span><span class=m>300000</span><span class=w>  </span><span class=c># 5 minutes max</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Database fallback when message brokers are unavailable</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>async_fallback</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;doctrine://default?table_name=messenger_messages&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>retry_strategy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>max_retries</span><span class=p>:</span><span class=w> </span><span class=m>10</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    </span><span class=nt>delay</span><span class=p>:</span><span class=w> </span><span class=m>60000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                    
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Dead letter queue for manual intervention</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>failed</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;doctrine://default?table_name=messenger_failed_messages&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Route messages to appropriate transports</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>routing</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Asset operations go to fast transport</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>&#39;App\Messenger\Message\Asset\AssetPostProcessMessage&#39;</span><span class=p>:</span><span class=w> </span><span class=l>async_fast</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Import operations need reliability</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>&#39;App\Messenger\Message\Import\ProcessImportBatchMessage&#39;</span><span class=p>:</span><span class=w> </span><span class=l>async_reliable</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Channel sync operations</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>&#39;App\Messenger\Message\Sync\ChannelSyncMessage&#39;</span><span class=p>:</span><span class=w> </span><span class=l>async_reliable</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Pimcore&#39;s internal async messages</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>&#39;Pimcore\Messenger\AssetUpdateTasksMessage&#39;</span><span class=p>:</span><span class=w> </span><span class=l>async_fast</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>&#39;Pimcore\Messenger\SearchBackendMessage&#39;</span><span class=p>:</span><span class=w> </span><span class=l>async_fast</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 The transport selection strategy matters: Redis excels at high-throughput ephemeral tasks (regenerating a thumbnail can always be retried). RabbitMQ provides delivery guarantees essential for operations with external side effects (sending data to an ERP that doesn&rsquo;t handle duplicates gracefully).</p></blockquote><p>Add the environment variables to your <code>.env</code> file:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=nv>MESSENGER_TRANSPORT_DSN_REDIS</span><span class=o>=</span>redis://localhost:6379/messages
+</span></span><span class=line><span class=cl><span class=nv>MESSENGER_TRANSPORT_DSN_AMQP</span><span class=o>=</span>amqp://guest:guest@localhost:5672/%2f/messages
+</span></span></code></pre></td></tr></table></div></div><h3 id=building-event-subscribers-for-crud-interception>Building Event Subscribers for CRUD Interception</h3><p>Now we create event subscribers that intercept Pimcore operations and dispatch messages. The goal is minimal latency in the event handler—we only validate and dispatch, never process.</p><p>First, define the message classes:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>declare</span><span class=p>(</span><span class=nx>strict_types</span><span class=o>=</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\Messenger\Message\Asset</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=sd>/**
+</span></span></span><span class=line><span class=cl><span class=sd> * Message dispatched when assets require post-processing.
+</span></span></span><span class=line><span class=cl><span class=sd> * Handlers will generate thumbnails, extract metadata, etc.
+</span></span></span><span class=line><span class=cl><span class=sd> */</span>
+</span></span><span class=line><span class=cl><span class=k>final</span> <span class=k>class</span> <span class=nc>AssetPostProcessMessage</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=fm>__construct</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>int</span> <span class=nv>$assetId</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>string</span> <span class=nv>$assetType</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=k>array</span> <span class=nv>$operations</span> <span class=o>=</span> <span class=p>[</span><span class=s1>&#39;thumbnails&#39;</span><span class=p>,</span> <span class=s1>&#39;metadata&#39;</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>int</span> <span class=nv>$priority</span> <span class=o>=</span> <span class=mi>0</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=o>?</span><span class=nx>string</span> <span class=nv>$correlationId</span> <span class=o>=</span> <span class=k>null</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getAssetId</span><span class=p>()</span><span class=o>:</span> <span class=nx>int</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>assetId</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getAssetType</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>assetType</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getOperations</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>operations</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getPriority</span><span class=p>()</span><span class=o>:</span> <span class=nx>int</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>priority</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getCorrelationId</span><span class=p>()</span><span class=o>:</span> <span class=o>?</span><span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>correlationId</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>declare</span><span class=p>(</span><span class=nx>strict_types</span><span class=o>=</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\Messenger\Message\Import</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=sd>/**
+</span></span></span><span class=line><span class=cl><span class=sd> * Message for processing a batch of import records.
+</span></span></span><span class=line><span class=cl><span class=sd> * Designed for chunked processing of large imports.
+</span></span></span><span class=line><span class=cl><span class=sd> */</span>
+</span></span><span class=line><span class=cl><span class=k>final</span> <span class=k>class</span> <span class=nc>ProcessImportBatchMessage</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=fm>__construct</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>string</span> <span class=nv>$importId</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>string</span> <span class=nv>$importType</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=k>array</span> <span class=nv>$recordIds</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>int</span> <span class=nv>$batchNumber</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>int</span> <span class=nv>$totalBatches</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=k>array</span> <span class=nv>$mappingConfig</span> <span class=o>=</span> <span class=p>[]</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getImportId</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>importId</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getImportType</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>importType</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getRecordIds</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>recordIds</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getBatchNumber</span><span class=p>()</span><span class=o>:</span> <span class=nx>int</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>batchNumber</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getTotalBatches</span><span class=p>()</span><span class=o>:</span> <span class=nx>int</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>totalBatches</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getMappingConfig</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>mappingConfig</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>Now create the event subscriber that intercepts Pimcore&rsquo;s asset events:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>declare</span><span class=p>(</span><span class=nx>strict_types</span><span class=o>=</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\EventSubscriber</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Messenger\Message\Asset\AssetPostProcessMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Pimcore\Event\AssetEvents</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Pimcore\Event\Model\AssetEvent</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Pimcore\Model\Asset</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\EventDispatcher\EventSubscriberInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Messenger\MessageBusInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Messenger\Stamp\DelayStamp</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Uid\Uuid</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Psr\Log\LoggerInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>final</span> <span class=k>class</span> <span class=nc>AssetWorkflowSubscriber</span> <span class=k>implements</span> <span class=nx>EventSubscriberInterface</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=c1>// Skip processing for these asset types (processed elsewhere or not needed)
+</span></span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>const</span> <span class=no>EXCLUDED_TYPES</span> <span class=o>=</span> <span class=p>[</span><span class=s1>&#39;folder&#39;</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Minimum file size (bytes) to warrant async processing
+</span></span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>const</span> <span class=no>ASYNC_THRESHOLD_BYTES</span> <span class=o>=</span> <span class=mi>102400</span><span class=p>;</span> <span class=c1>// 100KB
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=fm>__construct</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>MessageBusInterface</span> <span class=nv>$messageBus</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>LoggerInterface</span> <span class=nv>$logger</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>static</span> <span class=k>function</span> <span class=nf>getSubscribedEvents</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>            <span class=nx>AssetEvents</span><span class=o>::</span><span class=na>POST_ADD</span> <span class=o>=&gt;</span> <span class=p>[</span><span class=s1>&#39;onAssetPostAdd&#39;</span><span class=p>,</span> <span class=o>-</span><span class=mi>100</span><span class=p>],</span>    <span class=c1>// Low priority: run after Pimcore&#39;s handlers
+</span></span></span><span class=line><span class=cl>            <span class=nx>AssetEvents</span><span class=o>::</span><span class=na>POST_UPDATE</span> <span class=o>=&gt;</span> <span class=p>[</span><span class=s1>&#39;onAssetPostUpdate&#39;</span><span class=p>,</span> <span class=o>-</span><span class=mi>100</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>        <span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>onAssetPostAdd</span><span class=p>(</span><span class=nx>AssetEvent</span> <span class=nv>$event</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$asset</span> <span class=o>=</span> <span class=nv>$event</span><span class=o>-&gt;</span><span class=na>getAsset</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=nv>$this</span><span class=o>-&gt;</span><span class=na>shouldProcessAsync</span><span class=p>(</span><span class=nv>$asset</span><span class=p>))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=nv>$correlationId</span> <span class=o>=</span> <span class=nx>Uuid</span><span class=o>::</span><span class=na>v4</span><span class=p>()</span><span class=o>-&gt;</span><span class=na>toRfc4122</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>info</span><span class=p>(</span><span class=s1>&#39;Dispatching asset post-process message&#39;</span><span class=p>,</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;assetId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;assetType&#39;</span> <span class=o>=&gt;</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getType</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;correlationId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$correlationId</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;fileSize&#39;</span> <span class=o>=&gt;</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getFileSize</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>        <span class=p>]);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=nv>$message</span> <span class=o>=</span> <span class=k>new</span> <span class=nx>AssetPostProcessMessage</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=nx>assetId</span><span class=o>:</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>            <span class=nx>assetType</span><span class=o>:</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getType</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>            <span class=nx>operations</span><span class=o>:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>determineOperations</span><span class=p>(</span><span class=nv>$asset</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=nx>priority</span><span class=o>:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>calculatePriority</span><span class=p>(</span><span class=nv>$asset</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=nx>correlationId</span><span class=o>:</span> <span class=nv>$correlationId</span>
+</span></span><span class=line><span class=cl>        <span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=c1>// Delay processing slightly to ensure database transaction is committed
+</span></span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>messageBus</span><span class=o>-&gt;</span><span class=na>dispatch</span><span class=p>(</span><span class=nv>$message</span><span class=p>,</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>            <span class=k>new</span> <span class=nx>DelayStamp</span><span class=p>(</span><span class=mi>500</span><span class=p>)</span> <span class=c1>// 500ms delay
+</span></span></span><span class=line><span class=cl>        <span class=p>]);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>onAssetPostUpdate</span><span class=p>(</span><span class=nx>AssetEvent</span> <span class=nv>$event</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$asset</span> <span class=o>=</span> <span class=nv>$event</span><span class=o>-&gt;</span><span class=na>getAsset</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Only reprocess if binary data changed
+</span></span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getDataChanged</span><span class=p>())</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$this</span><span class=o>-&gt;</span><span class=na>shouldProcessAsync</span><span class=p>(</span><span class=nv>$asset</span><span class=p>))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$message</span> <span class=o>=</span> <span class=k>new</span> <span class=nx>AssetPostProcessMessage</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=nx>assetId</span><span class=o>:</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=nx>assetType</span><span class=o>:</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getType</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=nx>operations</span><span class=o>:</span> <span class=p>[</span><span class=s1>&#39;thumbnails&#39;</span><span class=p>],</span> <span class=c1>// Only regenerate thumbnails on update
+</span></span></span><span class=line><span class=cl>                <span class=nx>correlationId</span><span class=o>:</span> <span class=nx>Uuid</span><span class=o>::</span><span class=na>v4</span><span class=p>()</span><span class=o>-&gt;</span><span class=na>toRfc4122</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>            <span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>            <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>messageBus</span><span class=o>-&gt;</span><span class=na>dispatch</span><span class=p>(</span><span class=nv>$message</span><span class=p>,</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>                <span class=k>new</span> <span class=nx>DelayStamp</span><span class=p>(</span><span class=mi>500</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=p>]);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>shouldProcessAsync</span><span class=p>(</span><span class=nx>Asset</span> <span class=nv>$asset</span><span class=p>)</span><span class=o>:</span> <span class=nx>bool</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// Exclude certain types
+</span></span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nx>in_array</span><span class=p>(</span><span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getType</span><span class=p>(),</span> <span class=nx>self</span><span class=o>::</span><span class=na>EXCLUDED_TYPES</span><span class=p>,</span> <span class=k>true</span><span class=p>))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=k>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=c1>// Only async for larger files
+</span></span></span><span class=line><span class=cl>        <span class=nv>$fileSize</span> <span class=o>=</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getFileSize</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$fileSize</span> <span class=o>!==</span> <span class=k>null</span> <span class=o>&amp;&amp;</span> <span class=nv>$fileSize</span> <span class=o>&lt;</span> <span class=nx>self</span><span class=o>::</span><span class=na>ASYNC_THRESHOLD_BYTES</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=k>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=k>true</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>determineOperations</span><span class=p>(</span><span class=nx>Asset</span> <span class=nv>$asset</span><span class=p>)</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$operations</span> <span class=o>=</span> <span class=p>[];</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$asset</span> <span class=nx>instanceof</span> <span class=nx>Asset\Image</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$operations</span><span class=p>[]</span> <span class=o>=</span> <span class=s1>&#39;thumbnails&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$operations</span><span class=p>[]</span> <span class=o>=</span> <span class=s1>&#39;metadata&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$operations</span><span class=p>[]</span> <span class=o>=</span> <span class=s1>&#39;color_extraction&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span> <span class=k>elseif</span> <span class=p>(</span><span class=nv>$asset</span> <span class=nx>instanceof</span> <span class=nx>Asset\Video</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$operations</span><span class=p>[]</span> <span class=o>=</span> <span class=s1>&#39;thumbnails&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$operations</span><span class=p>[]</span> <span class=o>=</span> <span class=s1>&#39;metadata&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$operations</span><span class=p>[]</span> <span class=o>=</span> <span class=s1>&#39;transcode&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span> <span class=k>elseif</span> <span class=p>(</span><span class=nv>$asset</span> <span class=nx>instanceof</span> <span class=nx>Asset\Document</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$operations</span><span class=p>[]</span> <span class=o>=</span> <span class=s1>&#39;preview&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$operations</span><span class=p>[]</span> <span class=o>=</span> <span class=s1>&#39;text_extraction&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$operations</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>calculatePriority</span><span class=p>(</span><span class=nx>Asset</span> <span class=nv>$asset</span><span class=p>)</span><span class=o>:</span> <span class=nx>int</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// Higher priority for smaller files (faster to process)
+</span></span></span><span class=line><span class=cl>        <span class=nv>$fileSize</span> <span class=o>=</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getFileSize</span><span class=p>()</span> <span class=o>??</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$fileSize</span> <span class=o>&lt;</span> <span class=mi>1048576</span><span class=p>)</span> <span class=p>{</span> <span class=c1>// &lt; 1MB
+</span></span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=mi>10</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span> <span class=k>elseif</span> <span class=p>(</span><span class=nv>$fileSize</span> <span class=o>&lt;</span> <span class=mi>10485760</span><span class=p>)</span> <span class=p>{</span> <span class=c1>// &lt; 10MB
+</span></span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=mi>5</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ The 500ms delay stamp is critical. Without it, your message handler might try to load an asset before the database transaction that created it has committed. This causes intermittent &ldquo;Asset not found&rdquo; errors that are maddening to debug.</p></blockquote><h3 id=implementing-message-handlers-with-proper-error-handling>Implementing Message Handlers with Proper Error Handling</h3><p>Message handlers do the actual work. They must be idempotent, properly scoped, and handle Pimcore&rsquo;s entity management correctly:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span><span class=lnt>142
+</span><span class=lnt>143
+</span><span class=lnt>144
+</span><span class=lnt>145
+</span><span class=lnt>146
+</span><span class=lnt>147
+</span><span class=lnt>148
+</span><span class=lnt>149
+</span><span class=lnt>150
+</span><span class=lnt>151
+</span><span class=lnt>152
+</span><span class=lnt>153
+</span><span class=lnt>154
+</span><span class=lnt>155
+</span><span class=lnt>156
+</span><span class=lnt>157
+</span><span class=lnt>158
+</span><span class=lnt>159
+</span><span class=lnt>160
+</span><span class=lnt>161
+</span><span class=lnt>162
+</span><span class=lnt>163
+</span><span class=lnt>164
+</span><span class=lnt>165
+</span><span class=lnt>166
+</span><span class=lnt>167
+</span><span class=lnt>168
+</span><span class=lnt>169
+</span><span class=lnt>170
+</span><span class=lnt>171
+</span><span class=lnt>172
+</span><span class=lnt>173
+</span><span class=lnt>174
+</span><span class=lnt>175
+</span><span class=lnt>176
+</span><span class=lnt>177
+</span><span class=lnt>178
+</span><span class=lnt>179
+</span><span class=lnt>180
+</span><span class=lnt>181
+</span><span class=lnt>182
+</span><span class=lnt>183
+</span><span class=lnt>184
+</span><span class=lnt>185
+</span><span class=lnt>186
+</span><span class=lnt>187
+</span><span class=lnt>188
+</span><span class=lnt>189
+</span><span class=lnt>190
+</span><span class=lnt>191
+</span><span class=lnt>192
+</span><span class=lnt>193
+</span><span class=lnt>194
+</span><span class=lnt>195
+</span><span class=lnt>196
+</span><span class=lnt>197
+</span><span class=lnt>198
+</span><span class=lnt>199
+</span><span class=lnt>200
+</span><span class=lnt>201
+</span><span class=lnt>202
+</span><span class=lnt>203
+</span><span class=lnt>204
+</span><span class=lnt>205
+</span><span class=lnt>206
+</span><span class=lnt>207
+</span><span class=lnt>208
+</span><span class=lnt>209
+</span><span class=lnt>210
+</span><span class=lnt>211
+</span><span class=lnt>212
+</span><span class=lnt>213
+</span><span class=lnt>214
+</span><span class=lnt>215
+</span><span class=lnt>216
+</span><span class=lnt>217
+</span><span class=lnt>218
+</span><span class=lnt>219
+</span><span class=lnt>220
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>declare</span><span class=p>(</span><span class=nx>strict_types</span><span class=o>=</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\Messenger\Handler\Asset</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Messenger\Message\Asset\AssetPostProcessMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Pimcore\Model\Asset</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Pimcore\Model\Asset\Image\Thumbnail</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Messenger\Attribute\AsMessageHandler</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Messenger\Exception\RecoverableMessageHandlingException</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Messenger\Exception\UnrecoverableMessageHandlingException</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Psr\Log\LoggerInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Doctrine\DBAL\Connection</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>#[AsMessageHandler]
+</span></span></span><span class=line><span class=cl><span class=k>final</span> <span class=k>class</span> <span class=nc>AssetPostProcessHandler</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=fm>__construct</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>LoggerInterface</span> <span class=nv>$logger</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>Connection</span> <span class=nv>$connection</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=k>array</span> <span class=nv>$thumbnailConfigs</span> <span class=o>=</span> <span class=p>[]</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=fm>__invoke</span><span class=p>(</span><span class=nx>AssetPostProcessMessage</span> <span class=nv>$message</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>info</span><span class=p>(</span><span class=s1>&#39;Processing asset post-process message&#39;</span><span class=p>,</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;assetId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$message</span><span class=o>-&gt;</span><span class=na>getAssetId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;operations&#39;</span> <span class=o>=&gt;</span> <span class=nv>$message</span><span class=o>-&gt;</span><span class=na>getOperations</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;correlationId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$message</span><span class=o>-&gt;</span><span class=na>getCorrelationId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>        <span class=p>]);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=c1>// Clear Pimcore&#39;s runtime cache to get fresh data
+</span></span></span><span class=line><span class=cl>        <span class=nx>\Pimcore\Cache\RuntimeCache</span><span class=o>::</span><span class=na>clear</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=nv>$asset</span> <span class=o>=</span> <span class=nx>Asset</span><span class=o>::</span><span class=na>getById</span><span class=p>(</span><span class=nv>$message</span><span class=o>-&gt;</span><span class=na>getAssetId</span><span class=p>());</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$asset</span> <span class=o>===</span> <span class=k>null</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=c1>// Check if asset was deleted after message was dispatched
+</span></span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=p>(</span><span class=nv>$this</span><span class=o>-&gt;</span><span class=na>assetWasDeleted</span><span class=p>(</span><span class=nv>$message</span><span class=o>-&gt;</span><span class=na>getAssetId</span><span class=p>()))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>                <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>info</span><span class=p>(</span><span class=s1>&#39;Asset was deleted, skipping processing&#39;</span><span class=p>,</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>                    <span class=s1>&#39;assetId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$message</span><span class=o>-&gt;</span><span class=na>getAssetId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=p>]);</span>
+</span></span><span class=line><span class=cl>                <span class=k>return</span><span class=p>;</span> <span class=c1>// Not an error, just skip
+</span></span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>            <span class=c1>// Asset might not be committed yet, retry
+</span></span></span><span class=line><span class=cl>            <span class=k>throw</span> <span class=k>new</span> <span class=nx>RecoverableMessageHandlingException</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=nx>sprintf</span><span class=p>(</span><span class=s1>&#39;Asset %d not found, will retry&#39;</span><span class=p>,</span> <span class=nv>$message</span><span class=o>-&gt;</span><span class=na>getAssetId</span><span class=p>())</span>
+</span></span><span class=line><span class=cl>            <span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=k>try</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>foreach</span> <span class=p>(</span><span class=nv>$message</span><span class=o>-&gt;</span><span class=na>getOperations</span><span class=p>()</span> <span class=k>as</span> <span class=nv>$operation</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>                <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>executeOperation</span><span class=p>(</span><span class=nv>$asset</span><span class=p>,</span> <span class=nv>$operation</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>            <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>info</span><span class=p>(</span><span class=s1>&#39;Asset processing completed&#39;</span><span class=p>,</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>                <span class=s1>&#39;assetId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$message</span><span class=o>-&gt;</span><span class=na>getAssetId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=s1>&#39;correlationId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$message</span><span class=o>-&gt;</span><span class=na>getCorrelationId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>            <span class=p>]);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span> <span class=k>catch</span> <span class=p>(</span><span class=nx>\ImagickException</span> <span class=nv>$e</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=c1>// Image processing errors are usually unrecoverable (corrupt file, unsupported format)
+</span></span></span><span class=line><span class=cl>            <span class=k>throw</span> <span class=k>new</span> <span class=nx>UnrecoverableMessageHandlingException</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=nx>sprintf</span><span class=p>(</span><span class=s1>&#39;Image processing failed for asset %d: %s&#39;</span><span class=p>,</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span> <span class=nv>$e</span><span class=o>-&gt;</span><span class=na>getMessage</span><span class=p>()),</span>
+</span></span><span class=line><span class=cl>                <span class=nx>previous</span><span class=o>:</span> <span class=nv>$e</span>
+</span></span><span class=line><span class=cl>            <span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span> <span class=k>catch</span> <span class=p>(</span><span class=nx>\RuntimeException</span> <span class=nv>$e</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=c1>// Generic runtime errors might be transient
+</span></span></span><span class=line><span class=cl>            <span class=k>throw</span> <span class=k>new</span> <span class=nx>RecoverableMessageHandlingException</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=nx>sprintf</span><span class=p>(</span><span class=s1>&#39;Processing failed for asset %d, will retry: %s&#39;</span><span class=p>,</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span> <span class=nv>$e</span><span class=o>-&gt;</span><span class=na>getMessage</span><span class=p>()),</span>
+</span></span><span class=line><span class=cl>                <span class=nx>previous</span><span class=o>:</span> <span class=nv>$e</span>
+</span></span><span class=line><span class=cl>            <span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>executeOperation</span><span class=p>(</span><span class=nx>Asset</span> <span class=nv>$asset</span><span class=p>,</span> <span class=nx>string</span> <span class=nv>$operation</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nx>match</span> <span class=p>(</span><span class=nv>$operation</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;thumbnails&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>generateThumbnails</span><span class=p>(</span><span class=nv>$asset</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;metadata&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>extractMetadata</span><span class=p>(</span><span class=nv>$asset</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;color_extraction&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>extractColors</span><span class=p>(</span><span class=nv>$asset</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;preview&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>generatePreview</span><span class=p>(</span><span class=nv>$asset</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;text_extraction&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>extractText</span><span class=p>(</span><span class=nv>$asset</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;transcode&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>transcodeVideo</span><span class=p>(</span><span class=nv>$asset</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=k>default</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>warning</span><span class=p>(</span><span class=s1>&#39;Unknown operation&#39;</span><span class=p>,</span> <span class=p>[</span><span class=s1>&#39;operation&#39;</span> <span class=o>=&gt;</span> <span class=nv>$operation</span><span class=p>]),</span>
+</span></span><span class=line><span class=cl>        <span class=p>};</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>generateThumbnails</span><span class=p>(</span><span class=nx>Asset</span> <span class=nv>$asset</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=nv>$asset</span> <span class=nx>instanceof</span> <span class=nx>Asset\Image</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=nv>$configs</span> <span class=o>=</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>thumbnailConfigs</span> <span class=o>?:</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>getDefaultThumbnailConfigs</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>foreach</span> <span class=p>(</span><span class=nv>$configs</span> <span class=k>as</span> <span class=nv>$configName</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$config</span> <span class=o>=</span> <span class=nx>Thumbnail\Config</span><span class=o>::</span><span class=na>getByName</span><span class=p>(</span><span class=nv>$configName</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=p>(</span><span class=nv>$config</span> <span class=o>!==</span> <span class=k>null</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>                <span class=c1>// Generate thumbnail synchronously in worker
+</span></span></span><span class=line><span class=cl>                <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getThumbnail</span><span class=p>(</span><span class=nv>$configName</span><span class=p>,</span> <span class=k>false</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>                
+</span></span><span class=line><span class=cl>                <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>debug</span><span class=p>(</span><span class=s1>&#39;Generated thumbnail&#39;</span><span class=p>,</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>                    <span class=s1>&#39;assetId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                    <span class=s1>&#39;config&#39;</span> <span class=o>=&gt;</span> <span class=nv>$configName</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=p>]);</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>extractMetadata</span><span class=p>(</span><span class=nx>Asset</span> <span class=nv>$asset</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=nv>$asset</span> <span class=nx>instanceof</span> <span class=nx>Asset\Image</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=c1>// Force metadata extraction
+</span></span></span><span class=line><span class=cl>        <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getMetadata</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getCustomSettings</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Extract EXIF data if available
+</span></span></span><span class=line><span class=cl>        <span class=nv>$dimensions</span> <span class=o>=</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getDimensions</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nv>$dimensions</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>debug</span><span class=p>(</span><span class=s1>&#39;Extracted image dimensions&#39;</span><span class=p>,</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>                <span class=s1>&#39;assetId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=s1>&#39;width&#39;</span> <span class=o>=&gt;</span> <span class=nv>$dimensions</span><span class=p>[</span><span class=s1>&#39;width&#39;</span><span class=p>]</span> <span class=o>??</span> <span class=k>null</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=s1>&#39;height&#39;</span> <span class=o>=&gt;</span> <span class=nv>$dimensions</span><span class=p>[</span><span class=s1>&#39;height&#39;</span><span class=p>]</span> <span class=o>??</span> <span class=k>null</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=p>]);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>extractColors</span><span class=p>(</span><span class=nx>Asset</span> <span class=nv>$asset</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=nv>$asset</span> <span class=nx>instanceof</span> <span class=nx>Asset\Image</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>        <span class=c1>// Implement color palette extraction using Imagick
+</span></span></span><span class=line><span class=cl>        <span class=c1>// Store results in custom metadata
+</span></span></span><span class=line><span class=cl>        <span class=k>try</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$imagePath</span> <span class=o>=</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getLocalFile</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=p>(</span><span class=nv>$imagePath</span> <span class=o>&amp;&amp;</span> <span class=nx>file_exists</span><span class=p>(</span><span class=nv>$imagePath</span><span class=p>))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>                <span class=nv>$colors</span> <span class=o>=</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>extractDominantColors</span><span class=p>(</span><span class=nv>$imagePath</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>                
+</span></span><span class=line><span class=cl>                <span class=nv>$customSettings</span> <span class=o>=</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getCustomSettings</span><span class=p>()</span> <span class=o>??</span> <span class=p>[];</span>
+</span></span><span class=line><span class=cl>                <span class=nv>$customSettings</span><span class=p>[</span><span class=s1>&#39;dominantColors&#39;</span><span class=p>]</span> <span class=o>=</span> <span class=nv>$colors</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>                <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>setCustomSettings</span><span class=p>(</span><span class=nv>$customSettings</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>                <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>save</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span> <span class=k>catch</span> <span class=p>(</span><span class=nx>\Exception</span> <span class=nv>$e</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>warning</span><span class=p>(</span><span class=s1>&#39;Color extraction failed&#39;</span><span class=p>,</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>                <span class=s1>&#39;assetId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>                <span class=s1>&#39;error&#39;</span> <span class=o>=&gt;</span> <span class=nv>$e</span><span class=o>-&gt;</span><span class=na>getMessage</span><span class=p>(),</span>
+</span></span><span class=line><span class=cl>            <span class=p>]);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>extractDominantColors</span><span class=p>(</span><span class=nx>string</span> <span class=nv>$imagePath</span><span class=p>)</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$imagick</span> <span class=o>=</span> <span class=k>new</span> <span class=nx>\Imagick</span><span class=p>(</span><span class=nv>$imagePath</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$imagick</span><span class=o>-&gt;</span><span class=na>quantizeImage</span><span class=p>(</span><span class=mi>5</span><span class=p>,</span> <span class=nx>\Imagick</span><span class=o>::</span><span class=na>COLORSPACE_RGB</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=k>false</span><span class=p>,</span> <span class=k>false</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$imagick</span><span class=o>-&gt;</span><span class=na>uniqueImageColors</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=nv>$colors</span> <span class=o>=</span> <span class=p>[];</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$width</span> <span class=o>=</span> <span class=nv>$imagick</span><span class=o>-&gt;</span><span class=na>getImageWidth</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=k>for</span> <span class=p>(</span><span class=nv>$i</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span> <span class=nv>$i</span> <span class=o>&lt;</span> <span class=nv>$width</span> <span class=o>&amp;&amp;</span> <span class=nv>$i</span> <span class=o>&lt;</span> <span class=mi>5</span><span class=p>;</span> <span class=nv>$i</span><span class=o>++</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$pixel</span> <span class=o>=</span> <span class=nv>$imagick</span><span class=o>-&gt;</span><span class=na>getImagePixelColor</span><span class=p>(</span><span class=nv>$i</span><span class=p>,</span> <span class=mi>0</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>            <span class=nv>$colors</span><span class=p>[]</span> <span class=o>=</span> <span class=nv>$pixel</span><span class=o>-&gt;</span><span class=na>getColor</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=nv>$imagick</span><span class=o>-&gt;</span><span class=na>destroy</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$colors</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>generatePreview</span><span class=p>(</span><span class=nx>Asset</span> <span class=nv>$asset</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=nv>$asset</span> <span class=nx>instanceof</span> <span class=nx>Asset\Document</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Generate document preview/thumbnail
+</span></span></span><span class=line><span class=cl>        <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getThumbnail</span><span class=p>(</span><span class=nx>Asset\Document\ImageThumbnail</span><span class=o>::</span><span class=na>getPreviewConfig</span><span class=p>());</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>extractText</span><span class=p>(</span><span class=nx>Asset</span> <span class=nv>$asset</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=nv>$asset</span> <span class=nx>instanceof</span> <span class=nx>Asset\Document</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Text extraction would typically use a library like Smalot\PdfParser
+</span></span></span><span class=line><span class=cl>        <span class=c1>// or shell out to pdftotext
+</span></span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>debug</span><span class=p>(</span><span class=s1>&#39;Text extraction placeholder&#39;</span><span class=p>,</span> <span class=p>[</span><span class=s1>&#39;assetId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>()]);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>transcodeVideo</span><span class=p>(</span><span class=nx>Asset</span> <span class=nv>$asset</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=nv>$asset</span> <span class=nx>instanceof</span> <span class=nx>Asset\Video</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Video transcoding would typically use FFmpeg
+</span></span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>logger</span><span class=o>-&gt;</span><span class=na>debug</span><span class=p>(</span><span class=s1>&#39;Video transcode placeholder&#39;</span><span class=p>,</span> <span class=p>[</span><span class=s1>&#39;assetId&#39;</span> <span class=o>=&gt;</span> <span class=nv>$asset</span><span class=o>-&gt;</span><span class=na>getId</span><span class=p>()]);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>assetWasDeleted</span><span class=p>(</span><span class=nx>int</span> <span class=nv>$assetId</span><span class=p>)</span><span class=o>:</span> <span class=nx>bool</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$result</span> <span class=o>=</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>connection</span><span class=o>-&gt;</span><span class=na>fetchOne</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;SELECT id FROM assets WHERE id = ?&#39;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=p>[</span><span class=nv>$assetId</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>        <span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$result</span> <span class=o>===</span> <span class=k>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>function</span> <span class=nf>getDefaultThumbnailConfigs</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        
+</span></span></code></pre></td></tr></table></div></div></article></main></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.158.0
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>
