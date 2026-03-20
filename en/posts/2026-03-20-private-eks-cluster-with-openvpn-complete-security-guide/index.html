@@ -1,0 +1,1106 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/en/posts/2026-03-20-private-eks-cluster-with-openvpn-complete-security-guide/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="Private EKS Cluster with OpenVPN: Complete Security Guide"><meta property="og:description" content="Learn to deploy a private EKS cluster with zero public exposure. Step-by-step Terraform setup, OpenVPN configuration, and observability tools for production."><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-20T00:00:00+00:00"><meta property="article:modified_time" content="2026-03-20T00:00:00+00:00"><meta property="article:tag" content="Kubernetes"><meta property="article:tag" content="Eks"><meta property="article:tag" content="Openvpn"><meta property="article:tag" content="Aws"><meta property="article:tag" content="Devops"><meta property="article:tag" content="Intermediate-Tutorial"><meta name=twitter:card content="summary"><meta name=twitter:title content="Private EKS Cluster with OpenVPN: Complete Security Guide"><meta name=twitter:description content="Learn to deploy a private EKS cluster with zero public exposure. Step-by-step Terraform setup, OpenVPN configuration, and observability tools for production."><script async src="https://www.googletagmanager.com/gtag/js?id=G-T337LHMQNF"></script><script>var doNotTrack=!1,dnt=navigator.doNotTrack||window.doNotTrack||navigator.msDoNotTrack,doNotTrack=dnt=="1"||dnt=="yes";if(!doNotTrack){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date),gtag("config","G-T337LHMQNF")}</script><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - Private EKS Cluster with OpenVPN: Complete Security Guide</title><link rel=icon href=/favicon.svg type=image/svg+xml><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><link rel=stylesheet href=/css/custom.css><script defer type=text/javascript src=/minima.b1f51601d2b23d26021d0197fc604b72ad8e88b61007a8812ae9469ee357ab59.js integrity="sha256-sfUWAdKyPSYCHQGX/GBLcq2OiLYQB6iBKulGnuNXq1k="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch{}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/en/>Home</a></li><li class="ml-2 mr-2"><a href=/en/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/en/series>Series</a></li><li class="ml-2 mr-2"><a href=/en/search>🔍</a></li><li class="ml-2 mr-2"><a href=/en/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-4">Private EKS Cluster with OpenVPN: Complete Security Guide</h1><div class="mb-6 text-sm font-mono opacity-50"><div class=mb-1><span>2026-03-20</span>
+&#183; <span>11 min read</span>
+&#183; <span>gen:2m 21s</span> &#183; <span>tok:19670</span></div><div><a href=/en/tags/kubernetes>#kubernetes</a>
+<a href=/en/tags/eks>#eks</a>
+<a href=/en/tags/openvpn>#openvpn</a>
+<a href=/en/tags/aws>#aws</a>
+<a href=/en/tags/devops>#devops</a>
+<a href=/en/tags/intermediate-tutorial>#intermediate-tutorial</a>
+<a href=/en/tags/english>#english</a></div></div><main class=mb-8><p>Learn to deploy a private EKS cluster with zero public exposure. Step-by-step Terraform setup, OpenVPN configuration, and observability tools for production.</p><article class=md><h1 id=securing-your-eks-cluster-a-hands-on-guide-to-private-networking-with-openvpn-access>Securing Your EKS Cluster: A Hands-On Guide to Private Networking with OpenVPN Access</h1><p>Every EKS tutorial starts the same way: create a cluster, expose the API endpoint publicly, configure kubectl, and you&rsquo;re done. It works for demos. It&rsquo;s terrible for production.</p><p>The moment you deploy a public EKS endpoint, you&rsquo;ve opened a door that every scanner on the internet will find within hours. AWS&rsquo;s control plane is hardened, but why accept that attack surface when you don&rsquo;t have to? The real challenge isn&rsquo;t creating a private cluster—it&rsquo;s maintaining developer productivity after you do.</p><p>This guide walks through building an EKS cluster with zero public exposure, establishing VPN access that developers won&rsquo;t hate, and deploying observability tools that function entirely within your private network. We&rsquo;ll cover the decisions that trip up experienced engineers and the configurations that prevent 3 AM pages.</p><h2 id=prerequisites>Prerequisites</h2><p>Before starting, ensure you have:</p><ul><li>AWS CLI v2 configured with credentials that have EKS, VPC, and EC2 full access</li><li>Terraform >= 1.5 (we&rsquo;ll use it for infrastructure)</li><li>kubectl >= 1.28</li><li>Helm >= 3.12</li><li>An AWS account with service quotas sufficient for 3+ nodes and a NAT Gateway</li><li>A domain name you control (for VPN certificate management)</li><li>Basic familiarity with Kubernetes networking concepts</li></ul><blockquote><p>📝 This guide uses us-east-1, but the architecture works in any region. Adjust availability zones accordingly.</p></blockquote><h2 id=architecture-and-key-concepts>Architecture and Key Concepts</h2><p>The architecture follows a defense-in-depth approach. Your EKS control plane API lives entirely within AWS&rsquo;s managed infrastructure with only private endpoint access. Worker nodes run in private subnets with no direct internet access. All outbound traffic routes through NAT Gateways, and all inbound developer access routes through an OpenVPN Access Server in a dedicated public subnet.</p><pre tabindex=0><code class=language-mermaid data-lang=mermaid>flowchart TB
+    subgraph Internet
+        DEV[Developer Workstation]
+    end
+    
+    subgraph AWS VPC [&#34;VPC 10.0.0.0/16&#34;]
+        subgraph Public Subnets
+            NAT[NAT Gateway]
+            OVPN[OpenVPN Access Server&lt;br/&gt;10.0.1.x]
+        end
+        
+        subgraph Private Subnets
+            subgraph EKS Cluster
+                CP[EKS Control Plane&lt;br/&gt;Private Endpoint Only]
+                NG1[Node Group AZ-a&lt;br/&gt;10.0.10.x]
+                NG2[Node Group AZ-b&lt;br/&gt;10.0.11.x]
+            end
+            
+            subgraph Observability
+                PROM[Prometheus&lt;br/&gt;10.0.20.x]
+                GRAF[Grafana&lt;br/&gt;10.0.20.x]
+            end
+        end
+    end
+    
+    DEV --&gt;|OpenVPN UDP 1194| OVPN
+    OVPN --&gt;|Private Routes| CP
+    OVPN --&gt;|Private Routes| NG1
+    OVPN --&gt;|Private Routes| NG2
+    NG1 &amp; NG2 --&gt;|Outbound Only| NAT
+    NAT --&gt;|ECR, CloudWatch| Internet
+    CP --&gt; NG1 &amp; NG2
+    NG1 &amp; NG2 --&gt; PROM
+    PROM --&gt; GRAF
+</code></pre><h3 id=key-design-decisions>Key Design Decisions</h3><p><strong>Private API endpoint only</strong>: The EKS control plane has no public endpoint. This means kubectl commands only work from within the VPC or through VPN.</p><p><strong>Split tunneling disabled by default</strong>: All traffic from connected developers routes through the VPN. This prevents DNS leaks and ensures consistent access patterns.</p><p><strong>NAT Gateway for outbound</strong>: Nodes need to pull images from ECR and send logs to CloudWatch. NAT Gateway provides this without exposing nodes directly.</p><p><strong>Observability stays internal</strong>: Prometheus and Grafana run as workloads in the cluster, accessible only through VPN. No public dashboards, no exposed metrics endpoints.</p><h2 id=step-by-step-implementation>Step-by-Step Implementation</h2><h3 id=building-the-private-vpc-foundation>Building the Private VPC Foundation</h3><p>The VPC design prevents the most common security misconfiguration: accidentally placing resources in public subnets. We use explicit subnet naming and separate CIDR ranges for different purposes.</p><p>Create a file named <code>vpc.tf</code>:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span><span class=lnt>142
+</span><span class=lnt>143
+</span><span class=lnt>144
+</span><span class=lnt>145
+</span><span class=lnt>146
+</span><span class=lnt>147
+</span><span class=lnt>148
+</span><span class=lnt>149
+</span><span class=lnt>150
+</span><span class=lnt>151
+</span><span class=lnt>152
+</span><span class=lnt>153
+</span><span class=lnt>154
+</span><span class=lnt>155
+</span><span class=lnt>156
+</span><span class=lnt>157
+</span><span class=lnt>158
+</span><span class=lnt>159
+</span><span class=lnt>160
+</span><span class=lnt>161
+</span><span class=lnt>162
+</span><span class=lnt>163
+</span><span class=lnt>164
+</span><span class=lnt>165
+</span><span class=lnt>166
+</span><span class=lnt>167
+</span><span class=lnt>168
+</span><span class=lnt>169
+</span><span class=lnt>170
+</span><span class=lnt>171
+</span><span class=lnt>172
+</span><span class=lnt>173
+</span><span class=lnt>174
+</span><span class=lnt>175
+</span><span class=lnt>176
+</span><span class=lnt>177
+</span><span class=lnt>178
+</span><span class=lnt>179
+</span><span class=lnt>180
+</span><span class=lnt>181
+</span><span class=lnt>182
+</span><span class=lnt>183
+</span><span class=lnt>184
+</span><span class=lnt>185
+</span><span class=lnt>186
+</span><span class=lnt>187
+</span><span class=lnt>188
+</span><span class=lnt>189
+</span><span class=lnt>190
+</span><span class=lnt>191
+</span><span class=lnt>192
+</span><span class=lnt>193
+</span><span class=lnt>194
+</span><span class=lnt>195
+</span><span class=lnt>196
+</span><span class=lnt>197
+</span><span class=lnt>198
+</span><span class=lnt>199
+</span><span class=lnt>200
+</span><span class=lnt>201
+</span><span class=lnt>202
+</span><span class=lnt>203
+</span><span class=lnt>204
+</span><span class=lnt>205
+</span><span class=lnt>206
+</span><span class=lnt>207
+</span><span class=lnt>208
+</span><span class=lnt>209
+</span><span class=lnt>210
+</span><span class=lnt>211
+</span><span class=lnt>212
+</span><span class=lnt>213
+</span><span class=lnt>214
+</span><span class=lnt>215
+</span><span class=lnt>216
+</span><span class=lnt>217
+</span><span class=lnt>218
+</span><span class=lnt>219
+</span><span class=lnt>220
+</span><span class=lnt>221
+</span><span class=lnt>222
+</span><span class=lnt>223
+</span><span class=lnt>224
+</span><span class=lnt>225
+</span><span class=lnt>226
+</span><span class=lnt>227
+</span><span class=lnt>228
+</span><span class=lnt>229
+</span><span class=lnt>230
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-hcl data-lang=hcl><span class=line><span class=cl><span class=c1># vpc.tf - Private-first VPC for EKS
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>terraform</span> {
+</span></span><span class=line><span class=cl>  <span class=k>required_providers</span> {
+</span></span><span class=line><span class=cl><span class=n>    aws</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>      source</span>  <span class=o>=</span> <span class=s2>&#34;hashicorp/aws&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>      version</span> <span class=o>=</span> <span class=s2>&#34;~&gt; 5.0&#34;</span>
+</span></span><span class=line><span class=cl>    }
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>provider</span> <span class=s2>&#34;aws&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  region</span> <span class=o>=</span> <span class=s2>&#34;us-east-1&#34;</span>
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>locals</span> {
+</span></span><span class=line><span class=cl><span class=n>  cluster_name</span> <span class=o>=</span> <span class=s2>&#34;private-eks-cluster&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  vpc_cidr</span>     <span class=o>=</span> <span class=s2>&#34;10.0.0.0/16&#34;</span><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>  
+</span></span></span><span class=line><span class=cl><span class=c1>  # Explicit subnet purposes prevent misplacement
+</span></span></span><span class=line><span class=cl><span class=n>  public_subnets</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    &#34;us-east-1a&#34;</span> <span class=o>=</span> <span class=s2>&#34;10.0.1.0/24&#34;</span><span class=c1>   # VPN and NAT only
+</span></span></span><span class=line><span class=cl><span class=n>    &#34;us-east-1b&#34;</span> <span class=o>=</span> <span class=s2>&#34;10.0.2.0/24&#34;</span><span class=c1>   # VPN and NAT only
+</span></span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>private_subnets</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    &#34;us-east-1a&#34;</span> <span class=o>=</span> <span class=s2>&#34;10.0.10.0/24&#34;</span><span class=c1>  # EKS nodes
+</span></span></span><span class=line><span class=cl><span class=n>    &#34;us-east-1b&#34;</span> <span class=o>=</span> <span class=s2>&#34;10.0.11.0/24&#34;</span><span class=c1>  # EKS nodes
+</span></span></span><span class=line><span class=cl>  }<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>  
+</span></span></span><span class=line><span class=cl><span class=c1>  # Separate range for observability workloads
+</span></span></span><span class=line><span class=cl><span class=n>  observability_subnets</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    &#34;us-east-1a&#34;</span> <span class=o>=</span> <span class=s2>&#34;10.0.20.0/24&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    &#34;us-east-1b&#34;</span> <span class=o>=</span> <span class=s2>&#34;10.0.21.0/24&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_vpc&#34; &#34;main&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  cidr_block</span>           <span class=o>=</span> <span class=k>local</span><span class=p>.</span><span class=k>vpc_cidr</span>
+</span></span><span class=line><span class=cl><span class=n>  enable_dns_hostnames</span> <span class=o>=</span> <span class=kt>true</span><span class=c1>  # Required for EKS private endpoint
+</span></span></span><span class=line><span class=cl><span class=n>  enable_dns_support</span>   <span class=o>=</span> <span class=kt>true</span><span class=c1>  # Required for EKS private endpoint
+</span></span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-vpc&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    &#34;kubernetes.io/cluster/${local.cluster_name}&#34;</span> <span class=o>=</span> <span class=s2>&#34;shared&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Public subnets - only for NAT and VPN
+</span></span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_subnet&#34; &#34;public&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  for_each</span> <span class=o>=</span> <span class=k>local</span><span class=p>.</span><span class=k>public_subnets</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>vpc_id</span>                  <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  cidr_block</span>              <span class=o>=</span> <span class=k>each</span><span class=p>.</span><span class=k>value</span>
+</span></span><span class=line><span class=cl><span class=n>  availability_zone</span>       <span class=o>=</span> <span class=k>each</span><span class=p>.</span><span class=k>key</span>
+</span></span><span class=line><span class=cl><span class=n>  map_public_ip_on_launch</span> <span class=o>=</span> <span class=kt>false</span><span class=c1>  # Explicit, even in public subnet
+</span></span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-public-${each.key}&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    Type</span> <span class=o>=</span> <span class=s2>&#34;public&#34;</span><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>    # Do NOT add kubernetes.io/role/elb tag - we don&#39;t want public LBs
+</span></span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Private subnets for EKS nodes
+</span></span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_subnet&#34; &#34;private&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  for_each</span> <span class=o>=</span> <span class=k>local</span><span class=p>.</span><span class=k>private_subnets</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>vpc_id</span>            <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  cidr_block</span>        <span class=o>=</span> <span class=k>each</span><span class=p>.</span><span class=k>value</span>
+</span></span><span class=line><span class=cl><span class=n>  availability_zone</span> <span class=o>=</span> <span class=k>each</span><span class=p>.</span><span class=k>key</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-private-${each.key}&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    Type</span> <span class=o>=</span> <span class=s2>&#34;private&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    &#34;kubernetes.io/cluster/${local.cluster_name}&#34;</span> <span class=o>=</span> <span class=s2>&#34;shared&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    &#34;kubernetes.io/role/internal-elb&#34;</span>             <span class=o>=</span> <span class=s2>&#34;1&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Internet Gateway - only for VPN and NAT
+</span></span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_internet_gateway&#34; &#34;main&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  vpc_id</span> <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-igw&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Elastic IP for NAT Gateway
+</span></span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_eip&#34; &#34;nat&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  domain</span> <span class=o>=</span> <span class=s2>&#34;vpc&#34;</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-nat-eip&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>depends_on</span> <span class=o>=</span> <span class=p>[</span><span class=k>aws_internet_gateway</span><span class=p>.</span><span class=k>main</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Single NAT Gateway (use multiple for production HA)
+</span></span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_nat_gateway&#34; &#34;main&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  allocation_id</span> <span class=o>=</span> <span class=k>aws_eip</span><span class=p>.</span><span class=k>nat</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  subnet_id</span>     <span class=o>=</span> <span class=k>aws_subnet</span><span class=p>.</span><span class=k>public</span><span class=p>[</span><span class=s2>&#34;us-east-1a&#34;</span><span class=p>].</span><span class=k>id</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-nat&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Route table for public subnets
+</span></span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_route_table&#34; &#34;public&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  vpc_id</span> <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>route</span> {
+</span></span><span class=line><span class=cl><span class=n>    cidr_block</span> <span class=o>=</span> <span class=s2>&#34;0.0.0.0/0&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    gateway_id</span> <span class=o>=</span> <span class=k>aws_internet_gateway</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-public-rt&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Route table for private subnets
+</span></span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_route_table&#34; &#34;private&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  vpc_id</span> <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>route</span> {
+</span></span><span class=line><span class=cl><span class=n>    cidr_block</span>     <span class=o>=</span> <span class=s2>&#34;0.0.0.0/0&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    nat_gateway_id</span> <span class=o>=</span> <span class=k>aws_nat_gateway</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-private-rt&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Associate public subnets
+</span></span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_route_table_association&#34; &#34;public&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  for_each</span> <span class=o>=</span> <span class=k>aws_subnet</span><span class=p>.</span><span class=k>public</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>subnet_id</span>      <span class=o>=</span> <span class=k>each</span><span class=p>.</span><span class=k>value</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  route_table_id</span> <span class=o>=</span> <span class=k>aws_route_table</span><span class=p>.</span><span class=k>public</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Associate private subnets
+</span></span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_route_table_association&#34; &#34;private&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  for_each</span> <span class=o>=</span> <span class=k>aws_subnet</span><span class=p>.</span><span class=k>private</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>subnet_id</span>      <span class=o>=</span> <span class=k>each</span><span class=p>.</span><span class=k>value</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  route_table_id</span> <span class=o>=</span> <span class=k>aws_route_table</span><span class=p>.</span><span class=k>private</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># VPC Endpoints for EKS private access
+</span></span></span><span class=line><span class=cl><span class=c1># These allow EKS nodes to access AWS APIs without internet routing
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_vpc_endpoint&#34; &#34;ecr_api&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  vpc_id</span>              <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  service_name</span>        <span class=o>=</span> <span class=s2>&#34;com.amazonaws.us-east-1.ecr.api&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  vpc_endpoint_type</span>   <span class=o>=</span> <span class=s2>&#34;Interface&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  subnet_ids</span>          <span class=o>=</span> <span class=p>[</span><span class=k>for</span> <span class=k>s</span> <span class=k>in</span> <span class=k>aws_subnet</span><span class=p>.</span><span class=k>private</span> <span class=err>:</span> <span class=k>s</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>  security_group_ids</span>  <span class=o>=</span> <span class=p>[</span><span class=k>aws_security_group</span><span class=p>.</span><span class=k>vpc_endpoints</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>  private_dns_enabled</span> <span class=o>=</span> <span class=kt>true</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-ecr-api-endpoint&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_vpc_endpoint&#34; &#34;ecr_dkr&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  vpc_id</span>              <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  service_name</span>        <span class=o>=</span> <span class=s2>&#34;com.amazonaws.us-east-1.ecr.dkr&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  vpc_endpoint_type</span>   <span class=o>=</span> <span class=s2>&#34;Interface&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  subnet_ids</span>          <span class=o>=</span> <span class=p>[</span><span class=k>for</span> <span class=k>s</span> <span class=k>in</span> <span class=k>aws_subnet</span><span class=p>.</span><span class=k>private</span> <span class=err>:</span> <span class=k>s</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>  security_group_ids</span>  <span class=o>=</span> <span class=p>[</span><span class=k>aws_security_group</span><span class=p>.</span><span class=k>vpc_endpoints</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>  private_dns_enabled</span> <span class=o>=</span> <span class=kt>true</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-ecr-dkr-endpoint&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_vpc_endpoint&#34; &#34;s3&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  vpc_id</span>            <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  service_name</span>      <span class=o>=</span> <span class=s2>&#34;com.amazonaws.us-east-1.s3&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  vpc_endpoint_type</span> <span class=o>=</span> <span class=s2>&#34;Gateway&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  route_table_ids</span>   <span class=o>=</span> <span class=p>[</span><span class=k>aws_route_table</span><span class=p>.</span><span class=k>private</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-s3-endpoint&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_vpc_endpoint&#34; &#34;sts&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  vpc_id</span>              <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  service_name</span>        <span class=o>=</span> <span class=s2>&#34;com.amazonaws.us-east-1.sts&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  vpc_endpoint_type</span>   <span class=o>=</span> <span class=s2>&#34;Interface&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  subnet_ids</span>          <span class=o>=</span> <span class=p>[</span><span class=k>for</span> <span class=k>s</span> <span class=k>in</span> <span class=k>aws_subnet</span><span class=p>.</span><span class=k>private</span> <span class=err>:</span> <span class=k>s</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>  security_group_ids</span>  <span class=o>=</span> <span class=p>[</span><span class=k>aws_security_group</span><span class=p>.</span><span class=k>vpc_endpoints</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>  private_dns_enabled</span> <span class=o>=</span> <span class=kt>true</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-sts-endpoint&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_security_group&#34; &#34;vpc_endpoints&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  name</span>        <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-vpc-endpoints-sg&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  description</span> <span class=o>=</span> <span class=s2>&#34;Security group for VPC endpoints&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  vpc_id</span>      <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>ingress</span> {
+</span></span><span class=line><span class=cl><span class=n>    from_port</span>   <span class=o>=</span> <span class=m>443</span>
+</span></span><span class=line><span class=cl><span class=n>    to_port</span>     <span class=o>=</span> <span class=m>443</span>
+</span></span><span class=line><span class=cl><span class=n>    protocol</span>    <span class=o>=</span> <span class=s2>&#34;tcp&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    cidr_blocks</span> <span class=o>=</span> <span class=p>[</span><span class=k>local</span><span class=p>.</span><span class=k>vpc_cidr</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>egress</span> {
+</span></span><span class=line><span class=cl><span class=n>    from_port</span>   <span class=o>=</span> <span class=m>0</span>
+</span></span><span class=line><span class=cl><span class=n>    to_port</span>     <span class=o>=</span> <span class=m>0</span>
+</span></span><span class=line><span class=cl><span class=n>    protocol</span>    <span class=o>=</span> <span class=s2>&#34;-1&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    cidr_blocks</span> <span class=o>=</span> <span class=p>[</span><span class=s2>&#34;0.0.0.0/0&#34;</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-vpc-endpoints-sg&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ The VPC endpoints are critical. Without them, your EKS nodes cannot pull images from ECR or authenticate with AWS services. Many &ldquo;private EKS doesn&rsquo;t work&rdquo; issues trace back to missing endpoints.</p></blockquote><h3 id=deploying-the-private-eks-cluster>Deploying the Private EKS Cluster</h3><p>Create <code>eks.tf</code> for the cluster configuration:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span><span class=lnt>142
+</span><span class=lnt>143
+</span><span class=lnt>144
+</span><span class=lnt>145
+</span><span class=lnt>146
+</span><span class=lnt>147
+</span><span class=lnt>148
+</span><span class=lnt>149
+</span><span class=lnt>150
+</span><span class=lnt>151
+</span><span class=lnt>152
+</span><span class=lnt>153
+</span><span class=lnt>154
+</span><span class=lnt>155
+</span><span class=lnt>156
+</span><span class=lnt>157
+</span><span class=lnt>158
+</span><span class=lnt>159
+</span><span class=lnt>160
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-hcl data-lang=hcl><span class=line><span class=cl><span class=c1># eks.tf - Private EKS cluster with no public endpoint
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_iam_role&#34; &#34;eks_cluster&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-cluster-role&#34;</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>assume_role_policy</span> <span class=o>=</span> <span class=k>jsonencode</span><span class=p>(</span>{
+</span></span><span class=line><span class=cl><span class=n>    Version</span> <span class=o>=</span> <span class=s2>&#34;2012-10-17&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    Statement</span> <span class=o>=</span> <span class=p>[</span>{
+</span></span><span class=line><span class=cl><span class=n>      Action</span> <span class=o>=</span> <span class=s2>&#34;sts:AssumeRole&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>      Effect</span> <span class=o>=</span> <span class=s2>&#34;Allow&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>      Principal</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>        Service</span> <span class=o>=</span> <span class=s2>&#34;eks.amazonaws.com&#34;</span>
+</span></span><span class=line><span class=cl>      }
+</span></span><span class=line><span class=cl>    }<span class=p>]</span>
+</span></span><span class=line><span class=cl>  }<span class=p>)</span>
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_iam_role_policy_attachment&#34; &#34;eks_cluster_policy&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  policy_arn</span> <span class=o>=</span> <span class=s2>&#34;arn:aws:iam::aws:policy/AmazonEKSClusterPolicy&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  role</span>       <span class=o>=</span> <span class=k>aws_iam_role</span><span class=p>.</span><span class=k>eks_cluster</span><span class=p>.</span><span class=k>name</span>
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_security_group&#34; &#34;eks_cluster&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  name</span>        <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-cluster-sg&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  description</span> <span class=o>=</span> <span class=s2>&#34;Security group for EKS cluster control plane&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  vpc_id</span>      <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>  
+</span></span></span><span class=line><span class=cl><span class=c1>  # Allow inbound from VPN subnet
+</span></span></span><span class=line><span class=cl>  <span class=k>ingress</span> {
+</span></span><span class=line><span class=cl><span class=n>    from_port</span>   <span class=o>=</span> <span class=m>443</span>
+</span></span><span class=line><span class=cl><span class=n>    to_port</span>     <span class=o>=</span> <span class=m>443</span>
+</span></span><span class=line><span class=cl><span class=n>    protocol</span>    <span class=o>=</span> <span class=s2>&#34;tcp&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    cidr_blocks</span> <span class=o>=</span> <span class=p>[</span><span class=k>for</span> <span class=k>s</span> <span class=k>in</span> <span class=k>local</span><span class=p>.</span><span class=k>public_subnets</span> <span class=err>:</span> <span class=k>s</span><span class=p>]</span><span class=c1>  # VPN lives here
+</span></span></span><span class=line><span class=cl><span class=n>    description</span> <span class=o>=</span> <span class=s2>&#34;Allow kubectl from VPN&#34;</span>
+</span></span><span class=line><span class=cl>  }<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>  
+</span></span></span><span class=line><span class=cl><span class=c1>  # Allow inbound from worker nodes
+</span></span></span><span class=line><span class=cl>  <span class=k>ingress</span> {
+</span></span><span class=line><span class=cl><span class=n>    from_port</span>   <span class=o>=</span> <span class=m>443</span>
+</span></span><span class=line><span class=cl><span class=n>    to_port</span>     <span class=o>=</span> <span class=m>443</span>
+</span></span><span class=line><span class=cl><span class=n>    protocol</span>    <span class=o>=</span> <span class=s2>&#34;tcp&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    cidr_blocks</span> <span class=o>=</span> <span class=p>[</span><span class=k>for</span> <span class=k>s</span> <span class=k>in</span> <span class=k>local</span><span class=p>.</span><span class=k>private_subnets</span> <span class=err>:</span> <span class=k>s</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>    description</span> <span class=o>=</span> <span class=s2>&#34;Allow from worker nodes&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>egress</span> {
+</span></span><span class=line><span class=cl><span class=n>    from_port</span>   <span class=o>=</span> <span class=m>0</span>
+</span></span><span class=line><span class=cl><span class=n>    to_port</span>     <span class=o>=</span> <span class=m>0</span>
+</span></span><span class=line><span class=cl><span class=n>    protocol</span>    <span class=o>=</span> <span class=s2>&#34;-1&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    cidr_blocks</span> <span class=o>=</span> <span class=p>[</span><span class=s2>&#34;0.0.0.0/0&#34;</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-cluster-sg&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_eks_cluster&#34; &#34;main&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  name</span>     <span class=o>=</span> <span class=k>local</span><span class=p>.</span><span class=k>cluster_name</span>
+</span></span><span class=line><span class=cl><span class=n>  role_arn</span> <span class=o>=</span> <span class=k>aws_iam_role</span><span class=p>.</span><span class=k>eks_cluster</span><span class=p>.</span><span class=k>arn</span>
+</span></span><span class=line><span class=cl><span class=n>  version</span>  <span class=o>=</span> <span class=s2>&#34;1.29&#34;</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>vpc_config</span> {
+</span></span><span class=line><span class=cl><span class=n>    subnet_ids</span>              <span class=o>=</span> <span class=p>[</span><span class=k>for</span> <span class=k>s</span> <span class=k>in</span> <span class=k>aws_subnet</span><span class=p>.</span><span class=k>private</span> <span class=err>:</span> <span class=k>s</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>    endpoint_private_access</span> <span class=o>=</span> <span class=kt>true</span><span class=c1>   # Enable private endpoint
+</span></span></span><span class=line><span class=cl><span class=n>    endpoint_public_access</span>  <span class=o>=</span> <span class=kt>false</span><span class=c1>  # Disable public endpoint completely
+</span></span></span><span class=line><span class=cl><span class=n>    security_group_ids</span>      <span class=o>=</span> <span class=p>[</span><span class=k>aws_security_group</span><span class=p>.</span><span class=k>eks_cluster</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>  }<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>  
+</span></span></span><span class=line><span class=cl><span class=c1>  # Enable control plane logging
+</span></span></span><span class=line><span class=cl><span class=n>  enabled_cluster_log_types</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;api&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;audit&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;authenticator&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;controllerManager&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;scheduler&#34;</span>
+</span></span><span class=line><span class=cl>  <span class=p>]</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>depends_on</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>    <span class=k>aws_iam_role_policy_attachment</span><span class=p>.</span><span class=k>eks_cluster_policy</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=k>aws_vpc_endpoint</span><span class=p>.</span><span class=k>ecr_api</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=k>aws_vpc_endpoint</span><span class=p>.</span><span class=k>ecr_dkr</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=k>aws_vpc_endpoint</span><span class=p>.</span><span class=k>s3</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=k>aws_vpc_endpoint</span><span class=p>.</span><span class=k>sts</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>  <span class=p>]</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=k>local</span><span class=p>.</span><span class=k>cluster_name</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Node IAM role
+</span></span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_iam_role&#34; &#34;eks_nodes&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-node-role&#34;</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>assume_role_policy</span> <span class=o>=</span> <span class=k>jsonencode</span><span class=p>(</span>{
+</span></span><span class=line><span class=cl><span class=n>    Version</span> <span class=o>=</span> <span class=s2>&#34;2012-10-17&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    Statement</span> <span class=o>=</span> <span class=p>[</span>{
+</span></span><span class=line><span class=cl><span class=n>      Action</span> <span class=o>=</span> <span class=s2>&#34;sts:AssumeRole&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>      Effect</span> <span class=o>=</span> <span class=s2>&#34;Allow&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>      Principal</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>        Service</span> <span class=o>=</span> <span class=s2>&#34;ec2.amazonaws.com&#34;</span>
+</span></span><span class=line><span class=cl>      }
+</span></span><span class=line><span class=cl>    }<span class=p>]</span>
+</span></span><span class=line><span class=cl>  }<span class=p>)</span>
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_iam_role_policy_attachment&#34; &#34;eks_node_policy&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  policy_arn</span> <span class=o>=</span> <span class=s2>&#34;arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  role</span>       <span class=o>=</span> <span class=k>aws_iam_role</span><span class=p>.</span><span class=k>eks_nodes</span><span class=p>.</span><span class=k>name</span>
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_iam_role_policy_attachment&#34; &#34;eks_cni_policy&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  policy_arn</span> <span class=o>=</span> <span class=s2>&#34;arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  role</span>       <span class=o>=</span> <span class=k>aws_iam_role</span><span class=p>.</span><span class=k>eks_nodes</span><span class=p>.</span><span class=k>name</span>
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_iam_role_policy_attachment&#34; &#34;eks_ecr_policy&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  policy_arn</span> <span class=o>=</span> <span class=s2>&#34;arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  role</span>       <span class=o>=</span> <span class=k>aws_iam_role</span><span class=p>.</span><span class=k>eks_nodes</span><span class=p>.</span><span class=k>name</span>
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_eks_node_group&#34; &#34;main&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  cluster_name</span>    <span class=o>=</span> <span class=k>aws_eks_cluster</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>name</span>
+</span></span><span class=line><span class=cl><span class=n>  node_group_name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-nodes&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  node_role_arn</span>   <span class=o>=</span> <span class=k>aws_iam_role</span><span class=p>.</span><span class=k>eks_nodes</span><span class=p>.</span><span class=k>arn</span>
+</span></span><span class=line><span class=cl><span class=n>  subnet_ids</span>      <span class=o>=</span> <span class=p>[</span><span class=k>for</span> <span class=k>s</span> <span class=k>in</span> <span class=k>aws_subnet</span><span class=p>.</span><span class=k>private</span> <span class=err>:</span> <span class=k>s</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>instance_types</span> <span class=o>=</span> <span class=p>[</span><span class=s2>&#34;t3.medium&#34;</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>scaling_config</span> {
+</span></span><span class=line><span class=cl><span class=n>    desired_size</span> <span class=o>=</span> <span class=m>3</span>
+</span></span><span class=line><span class=cl><span class=n>    max_size</span>     <span class=o>=</span> <span class=m>5</span>
+</span></span><span class=line><span class=cl><span class=n>    min_size</span>     <span class=o>=</span> <span class=m>2</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>update_config</span> {
+</span></span><span class=line><span class=cl><span class=n>    max_unavailable</span> <span class=o>=</span> <span class=m>1</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>depends_on</span> <span class=o>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>    <span class=k>aws_iam_role_policy_attachment</span><span class=p>.</span><span class=k>eks_node_policy</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=k>aws_iam_role_policy_attachment</span><span class=p>.</span><span class=k>eks_cni_policy</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=k>aws_iam_role_policy_attachment</span><span class=p>.</span><span class=k>eks_ecr_policy</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>  <span class=p>]</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-nodes&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Output the cluster endpoint for VPN configuration
+</span></span></span><span class=line><span class=cl><span class=k>output</span> <span class=s2>&#34;cluster_endpoint&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  value</span> <span class=o>=</span> <span class=k>aws_eks_cluster</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>endpoint</span>
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>output</span> <span class=s2>&#34;cluster_ca_certificate&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  value</span>     <span class=o>=</span> <span class=k>aws_eks_cluster</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>certificate_authority</span><span class=p>[</span><span class=m>0</span><span class=p>].</span><span class=k>data</span>
+</span></span><span class=line><span class=cl><span class=n>  sensitive</span> <span class=o>=</span> <span class=kt>true</span>
+</span></span><span class=line><span class=cl>}
+</span></span></code></pre></td></tr></table></div></div><p>Apply the Terraform:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>terraform init
+</span></span><span class=line><span class=cl>terraform plan
+</span></span><span class=line><span class=cl>terraform apply
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 The cluster takes 10-15 minutes to create. The private endpoint means you cannot access it yet—that&rsquo;s intentional. We need the VPN first.</p></blockquote><h3 id=deploying-openvpn-access-server>Deploying OpenVPN Access Server</h3><p>OpenVPN Access Server provides a web UI for user management and client configuration distribution. We&rsquo;ll deploy it on an EC2 instance in the public subnet.</p><p>Create <code>openvpn.tf</code>:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-hcl data-lang=hcl><span class=line><span class=cl><span class=c1># openvpn.tf - OpenVPN Access Server deployment
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>variable</span> <span class=s2>&#34;ssh_key_name&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  description</span> <span class=o>=</span> <span class=s2>&#34;Name of the SSH key pair for OpenVPN instance access&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  type</span>        <span class=o>=</span> <span class=k>string</span>
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>variable</span> <span class=s2>&#34;admin_cidr_blocks&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  description</span> <span class=o>=</span> <span class=s2>&#34;CIDR blocks allowed to access admin UI and SSH (restrict to your IP)&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  type</span>        <span class=o>=</span> <span class=k>list</span><span class=p>(</span><span class=k>string</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=n>  default</span>     <span class=o>=</span> <span class=p>[</span><span class=s2>&#34;0.0.0.0/0&#34;</span><span class=p>]</span><span class=c1>  # Override this in production!
+</span></span></span><span class=line><span class=cl>}<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1># Find the latest OpenVPN Access Server AMI
+</span></span></span><span class=line><span class=cl><span class=k>data</span> <span class=s2>&#34;aws_ami&#34; &#34;openvpn&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  most_recent</span> <span class=o>=</span> <span class=kt>true</span>
+</span></span><span class=line><span class=cl><span class=n>  owners</span>      <span class=o>=</span> <span class=p>[</span><span class=s2>&#34;679593333241&#34;</span><span class=p>]</span><span class=c1>  # OpenVPN Inc.
+</span></span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>filter</span> {
+</span></span><span class=line><span class=cl><span class=n>    name</span>   <span class=o>=</span> <span class=s2>&#34;name&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    values</span> <span class=o>=</span> <span class=p>[</span><span class=s2>&#34;OpenVPN Access Server Community Image*&#34;</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>filter</span> {
+</span></span><span class=line><span class=cl><span class=n>    name</span>   <span class=o>=</span> <span class=s2>&#34;virtualization-type&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    values</span> <span class=o>=</span> <span class=p>[</span><span class=s2>&#34;hvm&#34;</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_security_group&#34; &#34;openvpn&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  name</span>        <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-openvpn-sg&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  description</span> <span class=o>=</span> <span class=s2>&#34;Security group for OpenVPN Access Server&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  vpc_id</span>      <span class=o>=</span> <span class=k>aws_vpc</span><span class=p>.</span><span class=k>main</span><span class=p>.</span><span class=k>id</span><span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>  
+</span></span></span><span class=line><span class=cl><span class=c1>  # Admin web UI - restrict to your IP in production
+</span></span></span><span class=line><span class=cl>  <span class=k>ingress</span> {
+</span></span><span class=line><span class=cl><span class=n>    from_port</span>   <span class=o>=</span> <span class=m>943</span>
+</span></span><span class=line><span class=cl><span class=n>    to_port</span>     <span class=o>=</span> <span class=m>943</span>
+</span></span><span class=line><span class=cl><span class=n>    protocol</span>    <span class=o>=</span> <span class=s2>&#34;tcp&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    cidr_blocks</span> <span class=o>=</span> <span class=k>var</span><span class=p>.</span><span class=k>admin_cidr_blocks</span>
+</span></span><span class=line><span class=cl><span class=n>    description</span> <span class=o>=</span> <span class=s2>&#34;Admin web UI&#34;</span>
+</span></span><span class=line><span class=cl>  }<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>  
+</span></span></span><span class=line><span class=cl><span class=c1>  # Client web UI
+</span></span></span><span class=line><span class=cl>  <span class=k>ingress</span> {
+</span></span><span class=line><span class=cl><span class=n>    from_port</span>   <span class=o>=</span> <span class=m>443</span>
+</span></span><span class=line><span class=cl><span class=n>    to_port</span>     <span class=o>=</span> <span class=m>443</span>
+</span></span><span class=line><span class=cl><span class=n>    protocol</span>    <span class=o>=</span> <span class=s2>&#34;tcp&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    cidr_blocks</span> <span class=o>=</span> <span class=p>[</span><span class=s2>&#34;0.0.0.0/0&#34;</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>    description</span> <span class=o>=</span> <span class=s2>&#34;Client web UI&#34;</span>
+</span></span><span class=line><span class=cl>  }<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>  
+</span></span></span><span class=line><span class=cl><span class=c1>  # OpenVPN UDP
+</span></span></span><span class=line><span class=cl>  <span class=k>ingress</span> {
+</span></span><span class=line><span class=cl><span class=n>    from_port</span>   <span class=o>=</span> <span class=m>1194</span>
+</span></span><span class=line><span class=cl><span class=n>    to_port</span>     <span class=o>=</span> <span class=m>1194</span>
+</span></span><span class=line><span class=cl><span class=n>    protocol</span>    <span class=o>=</span> <span class=s2>&#34;udp&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    cidr_blocks</span> <span class=o>=</span> <span class=p>[</span><span class=s2>&#34;0.0.0.0/0&#34;</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>    description</span> <span class=o>=</span> <span class=s2>&#34;OpenVPN UDP&#34;</span>
+</span></span><span class=line><span class=cl>  }<span class=c1>
+</span></span></span><span class=line><span class=cl><span class=c1>  
+</span></span></span><span class=line><span class=cl><span class=c1>  # SSH for initial setup - remove after configuration
+</span></span></span><span class=line><span class=cl>  <span class=k>ingress</span> {
+</span></span><span class=line><span class=cl><span class=n>    from_port</span>   <span class=o>=</span> <span class=m>22</span>
+</span></span><span class=line><span class=cl><span class=n>    to_port</span>     <span class=o>=</span> <span class=m>22</span>
+</span></span><span class=line><span class=cl><span class=n>    protocol</span>    <span class=o>=</span> <span class=s2>&#34;tcp&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    cidr_blocks</span> <span class=o>=</span> <span class=k>var</span><span class=p>.</span><span class=k>admin_cidr_blocks</span>
+</span></span><span class=line><span class=cl><span class=n>    description</span> <span class=o>=</span> <span class=s2>&#34;SSH access&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>egress</span> {
+</span></span><span class=line><span class=cl><span class=n>    from_port</span>   <span class=o>=</span> <span class=m>0</span>
+</span></span><span class=line><span class=cl><span class=n>    to_port</span>     <span class=o>=</span> <span class=m>0</span>
+</span></span><span class=line><span class=cl><span class=n>    protocol</span>    <span class=o>=</span> <span class=s2>&#34;-1&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>    cidr_blocks</span> <span class=o>=</span> <span class=p>[</span><span class=s2>&#34;0.0.0.0/0&#34;</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-openvpn-sg&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_instance&#34; &#34;openvpn&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  ami</span>                         <span class=o>=</span> <span class=k>data</span><span class=p>.</span><span class=k>aws_ami</span><span class=p>.</span><span class=k>openvpn</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  instance_type</span>               <span class=o>=</span> <span class=s2>&#34;t3.small&#34;</span>
+</span></span><span class=line><span class=cl><span class=n>  subnet_id</span>                   <span class=o>=</span> <span class=k>aws_subnet</span><span class=p>.</span><span class=k>public</span><span class=p>[</span><span class=s2>&#34;us-east-1a&#34;</span><span class=p>].</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  vpc_security_group_ids</span>      <span class=o>=</span> <span class=p>[</span><span class=k>aws_security_group</span><span class=p>.</span><span class=k>openvpn</span><span class=p>.</span><span class=k>id</span><span class=p>]</span>
+</span></span><span class=line><span class=cl><span class=n>  associate_public_ip_address</span> <span class=o>=</span> <span class=kt>true</span>
+</span></span><span class=line><span class=cl><span class=n>  key_name</span>                    <span class=o>=</span> <span class=k>var</span><span class=p>.</span><span class=k>ssh_key_name</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=k>root_block_device</span> {
+</span></span><span class=line><span class=cl><span class=n>    volume_size</span> <span class=o>=</span> <span class=m>20</span>
+</span></span><span class=line><span class=cl><span class=n>    encrypted</span>   <span class=o>=</span> <span class=kt>true</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-openvpn&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>resource</span> <span class=s2>&#34;aws_eip&#34; &#34;openvpn&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  instance</span> <span class=o>=</span> <span class=k>aws_instance</span><span class=p>.</span><span class=k>openvpn</span><span class=p>.</span><span class=k>id</span>
+</span></span><span class=line><span class=cl><span class=n>  domain</span>   <span class=o>=</span> <span class=s2>&#34;vpc&#34;</span>
+</span></span><span class=line><span class=cl>  
+</span></span><span class=line><span class=cl>  <span class=n>tags</span> <span class=o>=</span> {
+</span></span><span class=line><span class=cl><span class=n>    Name</span> <span class=o>=</span> <span class=s2>&#34;${local.cluster_name}-openvpn-eip&#34;</span>
+</span></span><span class=line><span class=cl>  }
+</span></span><span class=line><span class=cl>}
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>output</span> <span class=s2>&#34;openvpn_public_ip&#34;</span> {
+</span></span><span class=line><span class=cl><span class=n>  value</span> <span class=o>=</span> <span class=k>aws_eip</span><span class=p>.</span><span class=k>openvpn</span><span class=p>.</span><span class=k>public_ip</span>
+</span></span><span class=line><span class=cl>}
+</span></span></code></pre></td></tr></table></div></div><p>After deploying, SSH into the OpenVPN server and complete initial setup:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>ssh -i your-key.pem openvpnas@&lt;openvpn_public_ip&gt;
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># The first login triggers the configuration wizard</span>
+</span></span><span class=line><span class=cl><span class=c1># Key settings:</span>
+</span></span><span class=line><span class=cl><span class=c1># - Agreement: yes</span>
+</span></span><span class=line><span class=cl><span class=c1># - Primary Access Server node: yes</span>
+</span></span><span class=line><span class=cl><span class=c1># - Network interface: (accept default, usually eth0)</span>
+</span></span><span class=line><span class=cl><span class=c1># - Admin UI port: 943</span>
+</span></span><span class=line><span class=cl><span class=c1># - TCP port: 443</span>
+</span></span><span class=line><span class=cl><span class=c1># - UDP port: 1194</span>
+</span></span><span class=line><span class=cl><span class=c1># - Route client traffic through VPN: yes (important for kubectl)</span>
+</span></span><span class=line><span class=cl><span class=c1># - Route DNS through VPN: yes</span>
+</span></span><span class=line><span class=cl><span class=c1># - Use local authentication: yes</span>
+</span></span><span class=line><span class=cl><span class=c1># - Private subnets to route: 10.0.0.0/16 (your VPC CIDR)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Set the admin password</span>
+</span></span><span class=line><span class=cl>sudo passwd openvpn
+</span></span></code></pre></td></tr></table></div></div><p>Configure the VPN routing for EKS access:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Access the admin UI at https://&lt;openvpn_public_ip&gt;:943/admin</span>
+</span></span><span class=line><span class=cl><span class=c1># Navigate to VPN Settings &gt; Routing</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Add these routes:</span>
+</span></span><span class=line><span class=cl><span class=c1># - 10.0.0.0/16 (VPC CIDR - routes all VPC traffic through VPN)</span>
+</span></span><span class=line><span class=cl><span class=c1># </span>
+</span></span><span class=line><span class=cl><span class=c1># Under DNS Settings:</span>
+</span></span><span class=line><span class=cl><span class=c1># - Set DNS servers to VPC DNS: 10.0</span>
+</span></span></code></pre></td></tr></table></div></div></article></main><script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js crossorigin=anonymous></script><script>mermaid.init(0[0],"code.language-mermaid")</script></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.158.0
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p><p class="mt-0 text-xs font-mono opacity-50">next gen → 2026-03-23</p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>
