@@ -1,0 +1,94 @@
+<svg viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg" width="1200" height="630">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#0d1a0d"/>
+      <stop offset="100%" stop-color="#009944" stop-opacity="0.4"/>
+    </linearGradient>
+    <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#00ff88"/>
+      <stop offset="100%" stop-color="#00cc66" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bgGrad)"/>
+
+  <!-- Grid -->
+  <line x1="0" y1="0" x2="0" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="60" y1="0" x2="60" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="120" y1="0" x2="120" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="180" y1="0" x2="180" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="240" y1="0" x2="240" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="300" y1="0" x2="300" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="360" y1="0" x2="360" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="420" y1="0" x2="420" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="480" y1="0" x2="480" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="540" y1="0" x2="540" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="600" y1="0" x2="600" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="660" y1="0" x2="660" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="720" y1="0" x2="720" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="780" y1="0" x2="780" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="840" y1="0" x2="840" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="900" y1="0" x2="900" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="960" y1="0" x2="960" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="1020" y1="0" x2="1020" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="1080" y1="0" x2="1080" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="1140" y1="0" x2="1140" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="1200" y1="0" x2="1200" y2="630" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="0" x2="1200" y2="0" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="60" x2="1200" y2="60" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="120" x2="1200" y2="120" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="180" x2="1200" y2="180" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="240" x2="1200" y2="240" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="300" x2="1200" y2="300" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="360" x2="1200" y2="360" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="420" x2="1200" y2="420" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="480" x2="1200" y2="480" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="540" x2="1200" y2="540" stroke="#009944" stroke-width="0.5" opacity="0.3"/><line x1="0" y1="600" x2="1200" y2="600" stroke="#009944" stroke-width="0.5" opacity="0.3"/>
+
+  <!-- Circuit decorations -->
+  
+    <g opacity="0.15">
+      <circle cx="950" cy="120" r="80" fill="none" stroke="#00ff88" stroke-width="1.5"/>
+      <circle cx="950" cy="120" r="50" fill="none" stroke="#00cc66" stroke-width="1"/>
+      <circle cx="950" cy="120" r="20" fill="#00cc66" opacity="0.5"/>
+      <line x1="870" y1="120" x2="750" y2="120" stroke="#00ff88" stroke-width="1.5"/>
+      <line x1="950" y1="40"  x2="950" y2="0"   stroke="#00ff88" stroke-width="1.5"/>
+      <line x1="1030" y1="120" x2="1100" y2="120" stroke="#00ff88" stroke-width="1.5"/>
+      <line x1="950" y1="200" x2="950" y2="280"  stroke="#00ff88" stroke-width="1.5"/>
+      
+      <circle cx="200" cy="520" r="60" fill="none" stroke="#00cc66" stroke-width="1"/>
+      <circle cx="200" cy="520" r="30" fill="none" stroke="#00ff88" stroke-width="0.8"/>
+      <line x1="140" y1="520" x2="80"  y2="520" stroke="#00cc66" stroke-width="1"/>
+      <line x1="260" y1="520" x2="380" y2="520" stroke="#00cc66" stroke-width="1"/>
+      <line x1="200" y1="460" x2="200" y2="380" stroke="#00cc66" stroke-width="1"/>
+      
+      <rect x="1050" y="450" width="40" height="40" rx="4" fill="none" stroke="#00ff88" stroke-width="1" opacity="0.6"/>
+      <rect x="1100" y="420" width="30" height="30" rx="4" fill="none" stroke="#00cc66" stroke-width="1" opacity="0.4"/>
+      <line x1="1090" y1="470" x2="1100" y2="435" stroke="#00ff88" stroke-width="0.8"/>
+    </g>
+
+  <!-- Top accent bar -->
+  <rect x="0" y="0" width="1200" height="6" fill="url(#barGrad)"/>
+
+  <!-- Category label -->
+  <rect x="80" y="80" rx="6" ry="6" width="162" height="36" 
+    fill="#00ff88" opacity="0.15" stroke="#00ff88" stroke-width="1"/>
+  <text x="96" y="103" font-family="monospace" font-size="14" 
+    fill="#00ff88" font-weight="600" letter-spacing="1">BACKEND / API</text>
+
+  <!-- Title -->
+  <text x="80" y="260" 
+      font-family="'JetBrains Mono', 'Fira Code', monospace" 
+      font-size="52" font-weight="700" fill="#ffffff" 
+      filter="url(#glow)">Event Sourcing con Kafka e Schema</text>
+    <text x="80" y="332" 
+      font-family="'JetBrains Mono', 'Fira Code', monospace" 
+      font-size="52" font-weight="700" fill="#ffffff" 
+      filter="url(#glow)">Registry: Guida Produzione</text>
+
+  <!-- Accent line under title -->
+  <rect x="80" y="404" width="120" height="4" 
+    rx="2" fill="#00ff88"/>
+
+  <!-- TL;DR / keyword tag -->
+  
+  <rect x="80" y="428" rx="4" ry="4" 
+    width="204" height="28" fill="#009944" opacity="0.3"/>
+  <text x="92" y="446" 
+    font-family="monospace" font-size="13" fill="#00cc66"># event sourcing kafka</text>
+
+  <!-- Difficulty badge -->
+  
+    <rect x="80" y="470" rx="20" ry="20" width="160" height="36" fill="#0d1a0d" opacity="0.8" stroke="#ffaa00" stroke-width="1.5"/>
+    <circle cx="106" cy="488" r="6" fill="#ffaa00"/>
+    <text x="120" y="493" font-family="monospace" font-size="14" fill="#ffaa00" font-weight="600">Intermediate</text>
+
+  <!-- Language badge -->
+  <rect x="260" y="470" rx="20" ry="20" width="140" height="36" 
+    fill="#0d1a0d" opacity="0.8" stroke="#00cc66" stroke-width="1"/>
+  <text x="285" y="493" font-family="monospace" font-size="13" fill="#00cc66">🇮🇹 Italiano</text>
+
+  <!-- Bottom watermark -->
+  <text x="80" y="590" font-family="monospace" font-size="13" 
+    fill="#009944" opacity="0.6">cron.umbe.me · AI Generated</text>
+  <text x="1120" y="590" font-family="monospace" font-size="13" 
+    fill="#009944" opacity="0.6" text-anchor="end">🤖</text>
+
+  <!-- Bottom accent bar -->
+  <rect x="0" y="624" width="1200" height="6" fill="url(#barGrad)"/>
+</svg>
