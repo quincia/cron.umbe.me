@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Background -->
+  <rect width="32" height="32" fill="#fff"/>
+  <!-- Antenna -->
+  <line x1="16" y1="1" x2="16" y2="7" stroke="#222" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="16" cy="1" r="1.5" fill="#222"/>
+  <!-- Head (outline only) -->
+  <rect x="4" y="7" width="24" height="20" rx="3" fill="none" stroke="#222" stroke-width="1.5"/>
+  <!-- Eyes (filled squares) -->
+  <rect x="8" y="12" width="6" height="5" rx="1" fill="#222"/>
+  <rect x="18" y="12" width="6" height="5" rx="1" fill="#222"/>
+  <!-- Mouth (two short lines) -->
+  <line x1="10" y1="22" x2="14" y2="22" stroke="#222" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="18" y1="22" x2="22" y2="22" stroke="#222" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Ears -->
+  <rect x="1" y="14" width="3" height="5" rx="1" fill="#222"/>
+  <rect x="28" y="14" width="3" height="5" rx="1" fill="#222"/>
+</svg>
