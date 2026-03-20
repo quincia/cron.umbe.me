@@ -1,0 +1,976 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/posts/2026-03-20-helm-chart-avanzato-hooks-tests-e-dependencies-kubernetes/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="Helm Chart Avanzato: Hooks, Tests e Dependencies Kubernetes"><meta property="og:description" content="Guida pratica a Helm hooks, tests e dependencies per deploy Kubernetes affidabili. Pattern concreti per orchestrare microservizi in produzione."><meta property="og:locale" content="it"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-20T00:00:00+00:00"><meta property="article:modified_time" content="2026-03-20T00:00:00+00:00"><meta property="article:tag" content="Helm"><meta property="article:tag" content="Kubernetes"><meta property="article:tag" content="Devops"><meta property="article:tag" content="Intermediate-Tutorial"><meta property="article:tag" content="Italiano"><meta property="article:tag" content="Microservizi"><meta name=twitter:card content="summary"><meta name=twitter:title content="Helm Chart Avanzato: Hooks, Tests e Dependencies Kubernetes"><meta name=twitter:description content="Guida pratica a Helm hooks, tests e dependencies per deploy Kubernetes affidabili. Pattern concreti per orchestrare microservizi in produzione."><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - Helm Chart Avanzato: Hooks, Tests e Dependencies Kubernetes</title><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><link rel=stylesheet href=/css/custom.css><script defer type=text/javascript src=/minima.0fd13d0809f6d20301e1285f3f521ceb44e122bca7ab703c4178b5220be4bc9b.js integrity="sha256-D9E9CAn20gMB4ShfP1Ic60ThIrynq3A8QXi1IgvkvJs="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch{}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/>Home</a></li><li class="ml-2 mr-2"><a href=/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/series>Serie</a></li><li class="ml-2 mr-2"><a href=/search>🔍</a></li><li class="ml-2 mr-2"><a href=/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-4">Helm Chart Avanzato: Hooks, Tests e Dependencies Kubernetes</h1><div class="mb-6 text-sm font-mono opacity-50"><div class=mb-1><span>2026-03-20</span>
+&#183; <span>11 min read</span>
+&#183; <span>gen:2m 33s</span> &#183; <span>tok:19947</span></div><div><a href=/tags/helm>#helm</a>
+<a href=/tags/kubernetes>#kubernetes</a>
+<a href=/tags/devops>#devops</a>
+<a href=/tags/intermediate-tutorial>#intermediate-tutorial</a>
+<a href=/tags/italiano>#italiano</a>
+<a href=/tags/microservizi>#microservizi</a></div></div><main class=mb-8><p>Guida pratica a Helm hooks, tests e dependencies per deploy Kubernetes affidabili. Pattern concreti per orchestrare microservizi in produzione.</p><article class=md><h1 id=helm-chart-avanzato-padroneggiare-hooks-tests-e-dependencies-per-deploy-kubernetes-affidabili>Helm Chart Avanzato: Padroneggiare Hooks, Tests e Dependencies per Deploy Kubernetes Affidabili</h1><p>Hai un chart Helm che funziona in sviluppo. Poi arriva il momento di andare in produzione: devi eseguire migrazioni database prima del deploy, validare che i servizi dipendenti siano raggiungibili, gestire rollback quando qualcosa va storto. Il tuo <code>values.yaml</code> diventa un mostro ingestibile e i deploy falliscono alle 3 di notte.</p><p>Questo articolo ti mostra come superare questi problemi reali. Non teoria astratta, ma pattern concreti che uso quotidianamente per orchestrare deploy di architetture microservizi con decine di componenti interdipendenti.</p><h2 id=prerequisiti>Prerequisiti</h2><ul><li>Kubernetes cluster funzionante (minikube, kind o cloud provider)</li><li>Helm 3.12+ installato</li><li>Familiarità con la sintassi base dei chart Helm</li><li>Conoscenza di base di Go templates</li><li>kubectl configurato e funzionante</li></ul><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Verifica versioni</span>
+</span></span><span class=line><span class=cl>helm version --short
+</span></span><span class=line><span class=cl><span class=c1># v3.14.0+g3fc9f4b</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>kubectl version --client
+</span></span><span class=line><span class=cl><span class=c1># Client Version: v1.29.0</span>
+</span></span></code></pre></td></tr></table></div></div><h2 id=architettura-e-concetti-chiave>Architettura e Concetti Chiave</h2><p>Prima di scrivere codice, capiamo come Helm orchestra il ciclo di vita di un release e dove si inseriscono hooks, test e dependencies.</p><pre tabindex=0><code>┌─────────────────────────────────────────────────────────────────┐
+│                    Helm Release Lifecycle                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  helm install/upgrade                                            │
+│         │                                                        │
+│         ▼                                                        │
+│  ┌──────────────────┐                                           │
+│  │ Resolve          │──────┬──────┬──────┐                      │
+│  │ Dependencies     │      │      │      │                      │
+│  └────────┬─────────┘      ▼      ▼      ▼                      │
+│           │           postgresql redis rabbitmq                  │
+│           │                │      │      │                      │
+│           │                └──────┴──────┘                      │
+│           ▼                       │                              │
+│  ┌──────────────────┐            │                              │
+│  │ pre-install/     │◄───────────┘                              │
+│  │ pre-upgrade hooks│                                           │
+│  └────────┬─────────┘                                           │
+│           │                                                      │
+│           │  Hook Execution Order (by weight):                   │
+│           │  ├─ weight: -10 → DB Migration                      │
+│           │  ├─ weight:   0 → Cache Warmup                      │
+│           │  └─ weight:  10 → Notification                      │
+│           ▼                                                      │
+│  ┌──────────────────┐                                           │
+│  │ Deploy Resources │                                           │
+│  └────────┬─────────┘                                           │
+│           ▼                                                      │
+│  ┌──────────────────┐                                           │
+│  │ post-install/    │                                           │
+│  │ post-upgrade     │                                           │
+│  └────────┬─────────┘                                           │
+│           ▼                                                      │
+│  ┌──────────────────┐     ┌─────────────────┐                   │
+│  │   helm test      │────►│ Success         │                   │
+│  └────────┬─────────┘     │ Release Complete│                   │
+│           │               └─────────────────┘                   │
+│           ▼                                                      │
+│  ┌──────────────────┐                                           │
+│  │ Failure          │                                           │
+│  │ Rollback Decision│                                           │
+���  └──────────────────┘                                           │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre><p><strong>Hooks</strong>: Job Kubernetes eseguiti in momenti specifici del ciclo di vita. Perfetti per migrazioni, seed data, cleanup.</p><p><strong>Tests</strong>: Pod che validano lo stato del release dopo il deploy. Helm li esegue con <code>helm test</code> e riporta successo/fallimento.</p><p><strong>Dependencies</strong>: Chart esterni che il tuo chart richiede. Helm li scarica, li configura e li installa nell&rsquo;ordine corretto.</p><h2 id=implementazione-passo-passo>Implementazione Passo-Passo</h2><h3 id=hooks-pre-install-e-pre-upgrade-per-migrazioni-database>Hooks Pre-Install e Pre-Upgrade per Migrazioni Database</h3><p>Il caso d&rsquo;uso più comune: eseguire migrazioni database prima che l&rsquo;applicazione parta. Vediamo un&rsquo;implementazione robusta con gestione errori e retry.</p><p>Struttura del chart:</p><pre tabindex=0><code>myapp/
+├── Chart.yaml
+├── values.yaml
+├── templates/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── hooks/
+│   │   ├── db-migration.yaml
+│   │   ├── seed-data.yaml
+│   │   └── pre-rollback-backup.yaml
+│   └── tests/
+│       ├── test-connection.yaml
+│       └── test-api-health.yaml
+└── charts/
+</code></pre><p><strong>Hook di migrazione database:</strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span><span class=lnt>62
+</span><span class=lnt>63
+</span><span class=lnt>64
+</span><span class=lnt>65
+</span><span class=lnt>66
+</span><span class=lnt>67
+</span><span class=lnt>68
+</span><span class=lnt>69
+</span><span class=lnt>70
+</span><span class=lnt>71
+</span><span class=lnt>72
+</span><span class=lnt>73
+</span><span class=lnt>74
+</span><span class=lnt>75
+</span><span class=lnt>76
+</span><span class=lnt>77
+</span><span class=lnt>78
+</span><span class=lnt>79
+</span><span class=lnt>80
+</span><span class=lnt>81
+</span><span class=lnt>82
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># templates/hooks/db-migration.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>if .Values.migrations.enabled }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>batch/v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Job</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-db-migrate</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>{{- <span class=l>include &#34;myapp.labels&#34; . | nindent 4 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Hook pre-install e pre-upgrade</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>pre-install,pre-upgrade</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Weight negativo = esegue prima di altri hook</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;-5&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Elimina il job precedente prima di crearne uno nuovo,</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># poi elimina dopo successo (mantieni in caso di fallimento per debug)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Timeout massimo per la migrazione</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>activeDeadlineSeconds</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.migrations.timeout | default 600 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Numero di retry in caso di fallimento</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>backoffLimit</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.migrations.retries | default 3 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>template</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>{{- <span class=l>include &#34;myapp.selectorLabels&#34; . | nindent 8 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>app.kubernetes.io/component</span><span class=p>:</span><span class=w> </span><span class=l>migration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Init container che aspetta il database</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>initContainers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>wait-for-db</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>busybox:1.36</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=l>sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Attendo che PostgreSQL sia raggiungibile...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              until nc -z {{ .Values.database.host }} {{ .Values.database.port }}; do
+</span></span></span><span class=line><span class=cl><span class=sd>                echo &#34;Database non ancora pronto, riprovo in 5 secondi...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>                sleep 5
+</span></span></span><span class=line><span class=cl><span class=sd>              done
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Database raggiungibile!&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>migrate</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;{{ .Values.image.repository }}:{{ .Values.image.tag }}&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>imagePullPolicy</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.image.pullPolicy }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>              set -e
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;=== Inizio migrazione database ===&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Versione applicazione: {{ .Values.image.tag }}&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Database: {{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              # Esegui le migrazioni con output dettagliato
+</span></span></span><span class=line><span class=cl><span class=sd>              ./migrate -path /migrations -database &#34;$DATABASE_URL&#34; up
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              RESULT=$?
+</span></span></span><span class=line><span class=cl><span class=sd>              if [ $RESULT -eq 0 ]; then
+</span></span></span><span class=line><span class=cl><span class=sd>                echo &#34;=== Migrazione completata con successo ===&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              else
+</span></span></span><span class=line><span class=cl><span class=sd>                echo &#34;=== ERRORE: Migrazione fallita con codice $RESULT ===&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>                exit $RESULT
+</span></span></span><span class=line><span class=cl><span class=sd>              fi</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DATABASE_URL</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>valueFrom</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>secretKeyRef</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-db-credentials</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>key</span><span class=p>:</span><span class=w> </span><span class=l>url</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>{{- <span class=l>if .Values.migrations.dryRun }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DRY_RUN</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;true&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>{{- <span class=l>end }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>{{- <span class=l>toYaml .Values.migrations.resources | nindent 12 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>{{- <span class=l>with .Values.nodeSelector }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>nodeSelector</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>{{- <span class=l>toYaml . | nindent 8 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>{{- <span class=l>end }}</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>end }}</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 <strong>Tip</strong>: Usa <code>hook-delete-policy: before-hook-creation,hook-succeeded</code> per mantenere i job falliti. Ti permette di ispezionare i log con <code>kubectl logs job/myapp-db-migrate</code> quando qualcosa va storto.</p></blockquote><p><strong>Hook per seed data con dipendenza dalla migrazione:</strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># templates/hooks/seed-data.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>if and .Values.seed.enabled (not .Values.global.production) }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>batch/v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Job</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-seed-data</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>post-install</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Weight maggiore = esegue DOPO la migrazione (weight -5)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;5&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>activeDeadlineSeconds</span><span class=p>:</span><span class=w> </span><span class=m>300</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>backoffLimit</span><span class=p>:</span><span class=w> </span><span class=m>2</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>template</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>seed</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;{{ .Values.image.repository }}:{{ .Values.image.tag }}&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>              set -e
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Caricamento dati di seed per ambiente {{ .Release.Namespace }}...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              # Verifica che le migrazioni siano state eseguite
+</span></span></span><span class=line><span class=cl><span class=sd>              ./cli db:check-migrations
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              # Carica i dati appropriati per l&#39;ambiente
+</span></span></span><span class=line><span class=cl><span class=sd>              {{- if eq .Release.Namespace &#34;staging&#34; }}
+</span></span></span><span class=line><span class=cl><span class=sd>              ./cli db:seed --dataset=staging
+</span></span></span><span class=line><span class=cl><span class=sd>              {{- else }}
+</span></span></span><span class=line><span class=cl><span class=sd>              ./cli db:seed --dataset=development
+</span></span></span><span class=line><span class=cl><span class=sd>              {{- end }}
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Seed completato!&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>envFrom</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>secretRef</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-db-credentials</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>end }}</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ <strong>Warning</strong>: Non eseguire mai seed data in produzione! Nota il controllo <code>(not .Values.global.production)</code> che disabilita questo hook negli ambienti di produzione.</p></blockquote><p><strong>Hook pre-rollback per backup:</strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># templates/hooks/pre-rollback-backup.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>if .Values.backup.beforeRollback }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>batch/v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Job</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-pre-rollback-backup</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>pre-rollback</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;-10&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>activeDeadlineSeconds</span><span class=p>:</span><span class=w> </span><span class=m>900</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>template</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>backup</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>postgres:15-alpine</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>              set -e
+</span></span></span><span class=line><span class=cl><span class=sd>              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+</span></span></span><span class=line><span class=cl><span class=sd>              BACKUP_NAME=&#34;pre_rollback_${TIMESTAMP}.sql.gz&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Creazione backup pre-rollback: $BACKUP_NAME&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              pg_dump -h &#34;$DB_HOST&#34; -U &#34;$DB_USER&#34; -d &#34;$DB_NAME&#34; | gzip &gt; /backup/$BACKUP_NAME
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              # Upload su S3 (opzionale)
+</span></span></span><span class=line><span class=cl><span class=sd>              {{- if .Values.backup.s3.enabled }}
+</span></span></span><span class=line><span class=cl><span class=sd>              aws s3 cp /backup/$BACKUP_NAME s3://{{ .Values.backup.s3.bucket }}/rollbacks/$BACKUP_NAME
+</span></span></span><span class=line><span class=cl><span class=sd>              {{- end }}
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Backup completato: $BACKUP_NAME&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DB_HOST</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.database.host | quote }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DB_USER</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>valueFrom</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>secretKeyRef</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-db-credentials</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>key</span><span class=p>:</span><span class=w> </span><span class=l>username</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DB_NAME</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.database.name | quote }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>PGPASSWORD</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>valueFrom</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>secretKeyRef</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-db-credentials</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>key</span><span class=p>:</span><span class=w> </span><span class=l>password</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>volumeMounts</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>backup-volume</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>mountPath</span><span class=p>:</span><span class=w> </span><span class=l>/backup</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>backup-volume</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>emptyDir</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>sizeLimit</span><span class=p>:</span><span class=w> </span><span class=l>5Gi</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>end }}</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><h3 id=test-suite-helm-per-validazione-post-deploy>Test Suite Helm per Validazione Post-Deploy</h3><p>I test Helm sono Pod che verificano lo stato del release. A differenza degli hook, non bloccano il deploy ma validano che tutto funzioni correttamente dopo l&rsquo;installazione.</p><p><strong>Test di connettività database:</strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># templates/tests/test-db-connection.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Pod</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-test-db</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>{{- <span class=l>include &#34;myapp.labels&#34; . | nindent 4 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>test</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;-5&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>test-db</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>postgres:15-alpine</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>          set -e
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Test connessione database ===&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test 1: Connessione base
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Test 1: Verifica connessione...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          pg_isready -h &#34;$DB_HOST&#34; -p &#34;$DB_PORT&#34; -U &#34;$DB_USER&#34; -d &#34;$DB_NAME&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test 2: Query di verifica
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Test 2: Esecuzione query di test...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          RESULT=$(psql -h &#34;$DB_HOST&#34; -U &#34;$DB_USER&#34; -d &#34;$DB_NAME&#34; -t -c &#34;SELECT COUNT(*) FROM schema_migrations;&#34;)
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Migrazioni applicate: $RESULT&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test 3: Verifica tabelle critiche
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Test 3: Verifica schema...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          psql -h &#34;$DB_HOST&#34; -U &#34;$DB_USER&#34; -d &#34;$DB_NAME&#34; -c &#34;\dt&#34; | grep -q &#34;users&#34; || {
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;ERRORE: Tabella &#39;users&#39; non trovata!&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          }
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Tutti i test database superati ===&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DB_HOST</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>value</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.database.host | quote }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DB_PORT</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>value</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.database.port | quote }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DB_USER</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>valueFrom</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>secretKeyRef</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-db-credentials</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>key</span><span class=p>:</span><span class=w> </span><span class=l>username</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DB_NAME</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>value</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.database.name | quote }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>PGPASSWORD</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>valueFrom</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>secretKeyRef</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-db-credentials</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>key</span><span class=p>:</span><span class=w> </span><span class=l>password</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><p><strong>Test API health check completo:</strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span><span class=lnt>62
+</span><span class=lnt>63
+</span><span class=lnt>64
+</span><span class=lnt>65
+</span><span class=lnt>66
+</span><span class=lnt>67
+</span><span class=lnt>68
+</span><span class=lnt>69
+</span><span class=lnt>70
+</span><span class=lnt>71
+</span><span class=lnt>72
+</span><span class=lnt>73
+</span><span class=lnt>74
+</span><span class=lnt>75
+</span><span class=lnt>76
+</span><span class=lnt>77
+</span><span class=lnt>78
+</span><span class=lnt>79
+</span><span class=lnt>80
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># templates/tests/test-api-health.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Pod</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-test-api</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>test</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;0&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>test-api</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>curlimages/curl:8.5.0</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>          set -e
+</span></span></span><span class=line><span class=cl><span class=sd>          API_URL=&#34;http://{{ include &#34;myapp.fullname&#34; . }}:{{ .Values.service.port }}&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Test API Health ===&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Endpoint: $API_URL&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Attendi che il servizio sia pronto
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Attendo che il servizio sia raggiungibile...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          for i in $(seq 1 30); do
+</span></span></span><span class=line><span class=cl><span class=sd>            if curl -sf &#34;$API_URL/health&#34; &gt; /dev/null 2&gt;&amp;1; then
+</span></span></span><span class=line><span class=cl><span class=sd>              break
+</span></span></span><span class=line><span class=cl><span class=sd>            fi
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;Tentativo $i/30...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            sleep 2
+</span></span></span><span class=line><span class=cl><span class=sd>          done
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test 1: Health endpoint
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Test 1: Health check...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          HEALTH=$(curl -sf &#34;$API_URL/health&#34;)
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Response: $HEALTH&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;$HEALTH&#34; | grep -q &#39;&#34;status&#34;:&#34;healthy&#34;&#39; || {
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;ERRORE: Health check fallito!&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          }
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test 2: Ready endpoint (include check dipendenze)
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Test 2: Readiness check...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          READY=$(curl -sf &#34;$API_URL/ready&#34;)
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Response: $READY&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Verifica che tutte le dipendenze siano OK
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;$READY&#34; | grep -q &#39;&#34;database&#34;:&#34;connected&#34;&#39; || {
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;ERRORE: Database non connesso!&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          }
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- if .Values.redis.enabled }}
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;$READY&#34; | grep -q &#39;&#34;redis&#34;:&#34;connected&#34;&#39; || {
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;ERRORE: Redis non connesso!&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          }
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- end }}
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test 3: Verifica configurazione (solo staging/dev)
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- if not .Values.global.production }}
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Test 3: Verifica configurazione...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          CONFIG=$(curl -sf &#34;$API_URL/debug/config&#34;)
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;$CONFIG&#34; | grep -q &#39;&#34;environment&#34;:&#34;{{ .Release.Namespace }}&#34;&#39; || {
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;WARNING: Environment mismatch&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          }
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- end }}
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test 4: Metriche Prometheus disponibili
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- if .Values.metrics.enabled }}
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Test 4: Metriche Prometheus...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          curl -sf &#34;$API_URL/metrics&#34; | grep -q &#34;http_requests_total&#34; || {
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;ERRORE: Metriche non disponibili!&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          }
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- end }}
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Tutti i test API superati ===&#34;</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><p><strong>Test di integrazione multi-servizio:</strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># templates/tests/test-integration.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>if .Values.tests.integration.enabled }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Pod</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-test-integration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>test</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;10&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>test-integration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;{{ .Values.tests.integration.image }}&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>          set -e
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Test di Integrazione ===&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Esegui test suite con pytest/jest/go test
+</span></span></span><span class=line><span class=cl><span class=sd>          cd /tests
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- if eq .Values.tests.integration.framework &#34;pytest&#34; }}
+</span></span></span><span class=line><span class=cl><span class=sd>          pytest integration/ \
+</span></span></span><span class=line><span class=cl><span class=sd>            --tb=short \
+</span></span></span><span class=line><span class=cl><span class=sd>            --junitxml=/results/integration.xml \
+</span></span></span><span class=line><span class=cl><span class=sd>            -v
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- else if eq .Values.tests.integration.framework &#34;jest&#34; }}
+</span></span></span><span class=line><span class=cl><span class=sd>          npm test -- --ci --reporters=default --reporters=jest-junit
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- end }}
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Test di integrazione completati ===&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>API_BASE_URL</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;http://{{ include &#34;</span><span class=l>myapp.fullname&#34; . }}:{{ .Values.service.port }}&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>TEST_TIMEOUT</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;{{ .Values.tests.integration.timeout | default 30 }}&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>volumeMounts</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>test-results</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>mountPath</span><span class=p>:</span><span class=w> </span><span class=l>/results</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>test-results</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>emptyDir</span><span class=p>:</span><span class=w> </span>{}<span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>end }}</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><h3 id=gestione-dependencies-multi-servizio>Gestione Dependencies Multi-Servizio</h3><p>Per architetture microservizi, devi orchestrare multiple dipendenze. Ecco un <code>Chart.yaml</code> completo con gestione avanzata:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># Chart.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v2</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>myapp</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>description</span><span class=p>:</span><span class=w> </span><span class=l>Applicazione principale con dipendenze complete</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=m>1.2.0</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>appVersion</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;2.1.0&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>dependencies</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># PostgreSQL - sempre richiesto</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>postgresql</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;13.2.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://charts.bitnami.com/bitnami&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>postgresql.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Alias permette di avere multiple istanze dello stesso chart</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>alias</span><span class=p>:</span><span class=w> </span><span class=l>db-primary</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># PostgreSQL replica per read-only (opzionale)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>postgresql</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;13.2.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://charts.bitnami.com/bitnami&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>postgresql.replica.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>alias</span><span class=p>:</span><span class=w> </span><span class=l>db-replica</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Redis per caching</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>redis</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;18.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://charts.bitnami.com/bitnami&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>redis.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># RabbitMQ per message queue</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>rabbitmq</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;12.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://charts.bitnami.com/bitnami&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>rabbitmq.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Tags permettono di abilitare gruppi di dipendenze</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>tags</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>messaging</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>async-processing</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Elasticsearch per search/logging</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>elasticsearch</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;19.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://charts.bitnami.com/bitnami&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>elasticsearch.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>tags</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>search</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>logging</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Chart interno per microservizio auth</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>auth-service</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;1.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;file://../auth-service&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>authService.enabled</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><p><strong>Values.yaml con override per le dipendenze:</strong></p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># values.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>global</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>production</span><span class=p>:</span><span class=w> </span><span class=kc>false</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>imageRegistry</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>storageClass</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;standard&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  
+</span></span></span><span class=line><span class=cl><span class=c># Configurazione applicazione principale</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>image</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=l>mycompany/myapp</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>tag</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;2.1.0&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>pullPolicy</span><span class=p>:</span><span class=w> </span><span class=l>IfNotPresent</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>service</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>port</span><span class=p>:</span><span class=w> </span><span class=m>8080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>ClusterIP</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># === CONFIGURAZIONE DIPENDENZE ===</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># PostgreSQL primario</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>postgresql</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  
+</span></span></span><span class=line><span class=cl><span class=nt>db-primary</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Override specifici per il chart postgresql con alias db-primary</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>auth</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>postgresPassword</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;&#34;</span><span class=w>  </span><span class=c># Sarà sovrascritto da secret esterno</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div></article></main><script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js crossorigin=anonymous></script><script>mermaid.init(0[0],"code.language-mermaid")</script></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.158.0
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p><p class="mt-0 text-xs font-mono opacity-50">next gen → 2026-03-23</p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>

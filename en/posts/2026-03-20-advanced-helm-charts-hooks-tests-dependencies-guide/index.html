@@ -1,0 +1,1087 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/en/posts/2026-03-20-advanced-helm-charts-hooks-tests-dependencies-guide/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="Advanced Helm Charts: Hooks, Tests & Dependencies Guide"><meta property="og:description" content="Master Helm hooks, test suites, and dependency management for production-grade Kubernetes deployments. Build reliable charts with atomic migrations and validation."><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-20T00:00:00+00:00"><meta property="article:modified_time" content="2026-03-20T00:00:00+00:00"><meta property="article:tag" content="Helm"><meta property="article:tag" content="Kubernetes"><meta property="article:tag" content="Devops"><meta property="article:tag" content="Intermediate-Tutorial"><meta property="article:tag" content="English"><meta property="article:tag" content="Deployment-Automation"><meta name=twitter:card content="summary"><meta name=twitter:title content="Advanced Helm Charts: Hooks, Tests & Dependencies Guide"><meta name=twitter:description content="Master Helm hooks, test suites, and dependency management for production-grade Kubernetes deployments. Build reliable charts with atomic migrations and validation."><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - Advanced Helm Charts: Hooks, Tests & Dependencies Guide</title><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><link rel=stylesheet href=/css/custom.css><script defer type=text/javascript src=/minima.b1f51601d2b23d26021d0197fc604b72ad8e88b61007a8812ae9469ee357ab59.js integrity="sha256-sfUWAdKyPSYCHQGX/GBLcq2OiLYQB6iBKulGnuNXq1k="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch{}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/en/>Home</a></li><li class="ml-2 mr-2"><a href=/en/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/en/series>Series</a></li><li class="ml-2 mr-2"><a href=/en/search>🔍</a></li><li class="ml-2 mr-2"><a href=/en/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-4">Advanced Helm Charts: Hooks, Tests & Dependencies Guide</h1><div class="mb-6 text-sm font-mono opacity-50"><div class=mb-1><span>2026-03-20</span>
+&#183; <span>12 min read</span>
+&#183; <span>gen:2m 37s</span> &#183; <span>tok:19588</span></div><div><a href=/en/tags/helm>#helm</a>
+<a href=/en/tags/kubernetes>#kubernetes</a>
+<a href=/en/tags/devops>#devops</a>
+<a href=/en/tags/intermediate-tutorial>#intermediate-tutorial</a>
+<a href=/en/tags/english>#english</a>
+<a href=/en/tags/deployment-automation>#deployment-automation</a></div></div><main class=mb-8><p>Master Helm hooks, test suites, and dependency management for production-grade Kubernetes deployments. Build reliable charts with atomic migrations and validation.</p><article class=md><h1 id=advanced-helm-charts-mastering-hooks-tests-and-dependencies-for-reliable-kubernetes-deployments>Advanced Helm Charts: Mastering Hooks, Tests and Dependencies for Reliable Kubernetes Deployments</h1><p>You&rsquo;ve deployed your first Helm charts successfully. Your applications run in Kubernetes, and basic templating feels comfortable. Then reality hits: a database migration fails mid-deployment, leaving your production environment in an inconsistent state. Or worse, you discover a misconfigured service only after it&rsquo;s handling live traffic.</p><p>These scenarios expose the gap between basic Helm usage and production-grade deployment orchestration. Standard charts handle simple workloads well, but complex applications demand more: automated pre-deployment validations, coordinated database migrations, graceful dependency management, and comprehensive testing before traffic reaches new pods.</p><p>This guide shows you how to build Helm charts that handle these challenges elegantly. You&rsquo;ll implement hooks that execute migrations atomically with proper rollback handling, create test suites that validate your entire deployment before marking it successful, and architect dependency relationships that work across complex microservice topologies.</p><h2 id=prerequisites>Prerequisites</h2><p>Before diving in, ensure you have:</p><ul><li><strong>Kubernetes cluster</strong> (1.24+) with kubectl configured</li><li><strong>Helm 3.12+</strong> installed locally</li><li><strong>Familiarity</strong> with basic Helm concepts: templates, values, releases</li><li><strong>Working knowledge</strong> of Kubernetes resources: Deployments, Services, Jobs, ConfigMaps</li><li><strong>A container registry</strong> accessible from your cluster (Docker Hub, ECR, GCR)</li></ul><p>You should be comfortable creating a basic Helm chart with <code>helm create</code> and understand the template directory structure.</p><h2 id=architecture-and-key-concepts>Architecture and Key Concepts</h2><p>Helm&rsquo;s advanced features operate on a lifecycle model that extends beyond simple resource creation. Understanding this lifecycle is crucial for building reliable deployment workflows.</p><pre tabindex=0><code class=language-mermaid data-lang=mermaid>flowchart TD
+    subgraph &#34;Helm Release Lifecycle&#34;
+        A[helm install/upgrade] --&gt; B{Pre-install/upgrade Hooks}
+        B --&gt;|Success| C[Deploy Kubernetes Resources]
+        B --&gt;|Failure| R1[Rollback &amp; Abort]
+        C --&gt; D{Post-install/upgrade Hooks}
+        D --&gt;|Success| E{Run Helm Tests}
+        D --&gt;|Failure| R2[Rollback Resources]
+        E --&gt;|Success| F[Release Complete]
+        E --&gt;|Failure| R3[Mark Release Failed]
+    end
+    
+    subgraph &#34;Hook Execution Order&#34;
+        H1[pre-install weight=-5] --&gt; H2[pre-install weight=0]
+        H2 --&gt; H3[pre-install weight=5]
+    end
+    
+    subgraph &#34;Dependency Resolution&#34;
+        P1[Parent Chart] --&gt; P2{Condition Check}
+        P2 --&gt;|enabled| P3[Load Subchart]
+        P2 --&gt;|disabled| P4[Skip Subchart]
+        P3 --&gt; P5[Merge Values]
+        P5 --&gt; P6[Render Templates]
+    end
+</code></pre><p><strong>Hooks</strong> are Kubernetes resources with special annotations that tell Helm to execute them at specific lifecycle points. Unlike regular chart resources, hooks run to completion before the lifecycle continues.</p><p><strong>Tests</strong> are post-deployment validation jobs that verify your release works correctly. They run on-demand via <code>helm test</code> and determine whether your deployment actually succeeded.</p><p><strong>Dependencies</strong> define relationships between charts, allowing you to compose complex applications from smaller, reusable components with conditional inclusion and value overrides.</p><h2 id=step-by-step-implementation>Step-by-Step Implementation</h2><h3 id=implementing-pre-install-and-post-upgrade-hooks-for-database-migrations>Implementing Pre-Install and Post-Upgrade Hooks for Database Migrations</h3><p>Database migrations represent the canonical use case for Helm hooks. You need migrations to complete before your application starts, and you need them to roll back cleanly if they fail.</p><p>Let&rsquo;s build a migration hook that handles PostgreSQL schema updates:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span><span class=lnt>62
+</span><span class=lnt>63
+</span><span class=lnt>64
+</span><span class=lnt>65
+</span><span class=lnt>66
+</span><span class=lnt>67
+</span><span class=lnt>68
+</span><span class=lnt>69
+</span><span class=lnt>70
+</span><span class=lnt>71
+</span><span class=lnt>72
+</span><span class=lnt>73
+</span><span class=lnt>74
+</span><span class=lnt>75
+</span><span class=lnt>76
+</span><span class=lnt>77
+</span><span class=lnt>78
+</span><span class=lnt>79
+</span><span class=lnt>80
+</span><span class=lnt>81
+</span><span class=lnt>82
+</span><span class=lnt>83
+</span><span class=lnt>84
+</span><span class=lnt>85
+</span><span class=lnt>86
+</span><span class=lnt>87
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># templates/db-migration-job.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>if .Values.migrations.enabled }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>batch/v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Job</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-db-migrate</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>{{- <span class=l>include &#34;myapp.labels&#34; . | nindent 4 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>app.kubernetes.io/component</span><span class=p>:</span><span class=w> </span><span class=l>migration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Hook type: runs before install and before upgrade</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>pre-install,pre-upgrade</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Weight determines execution order (lower runs first)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;-5&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Delete previous hook job before creating new one</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Prevent infinite retry loops</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>backoffLimit</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.migrations.backoffLimit | default 3 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Auto-cleanup after completion</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>ttlSecondsAfterFinished</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.migrations.ttlSeconds | default 600 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>template</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>{{- <span class=l>include &#34;myapp.selectorLabels&#34; . | nindent 8 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>app.kubernetes.io/component</span><span class=p>:</span><span class=w> </span><span class=l>migration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>{{- <span class=l>with .Values.migrations.securityContext }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>securityContext</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>{{- <span class=l>toYaml . | nindent 8 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>{{- <span class=l>end }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>initContainers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Wait for database to be ready before running migrations</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>wait-for-db</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>busybox:1.36</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=l>sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Waiting for database at {{ .Values.database.host }}:{{ .Values.database.port }}&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              until nc -z {{ .Values.database.host }} {{ .Values.database.port }}; do
+</span></span></span><span class=line><span class=cl><span class=sd>                echo &#34;Database not ready, sleeping...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>                sleep 2
+</span></span></span><span class=line><span class=cl><span class=sd>              done
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Database is ready&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>migrate</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;{{ .Values.migrations.image.repository }}:{{ .Values.migrations.image.tag }}&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>imagePullPolicy</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.migrations.image.pullPolicy | default &#34;IfNotPresent&#34; }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>              set -e
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Starting database migration...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Current schema version:&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              # Run migration tool (example using golang-migrate)
+</span></span></span><span class=line><span class=cl><span class=sd>              migrate -path /migrations -database &#34;$DATABASE_URL&#34; version || echo &#34;No migrations applied yet&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Applying pending migrations...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              migrate -path /migrations -database &#34;$DATABASE_URL&#34; up
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Migration completed. New schema version:&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              migrate -path /migrations -database &#34;$DATABASE_URL&#34; version</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DATABASE_URL</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>valueFrom</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>secretKeyRef</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.database.existingSecret | default (printf &#34;%s-db-credentials&#34; (include &#34;myapp.fullname&#34; .)) }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>key</span><span class=p>:</span><span class=w> </span><span class=l>url</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>{{- <span class=l>toYaml .Values.migrations.resources | nindent 12 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span>{{- <span class=l>with .Values.migrations.volumeMounts }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>volumeMounts</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>{{- <span class=l>toYaml . | nindent 12 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span>{{- <span class=l>end }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>{{- <span class=l>with .Values.migrations.volumes }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>{{- <span class=l>toYaml . | nindent 8 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>{{- <span class=l>end }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>{{- <span class=l>with .Values.nodeSelector }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>nodeSelector</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>{{- <span class=l>toYaml . | nindent 8 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>{{- <span class=l>end }}</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>end }}</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 The <code>hook-delete-policy: before-hook-creation,hook-succeeded</code> annotation is critical. It cleans up successful jobs automatically but preserves failed ones for debugging.</p></blockquote><p>Now let&rsquo;s add a seed data hook that runs after initial installation only:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># templates/db-seed-job.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>if and .Values.seed.enabled (not .Release.IsUpgrade) }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>batch/v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Job</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-db-seed</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>{{- <span class=l>include &#34;myapp.labels&#34; . | nindent 4 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>app.kubernetes.io/component</span><span class=p>:</span><span class=w> </span><span class=l>seed</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>post-install</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Run after migrations (which have weight -5)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;0&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>backoffLimit</span><span class=p>:</span><span class=w> </span><span class=m>1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>ttlSecondsAfterFinished</span><span class=p>:</span><span class=w> </span><span class=m>300</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>template</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>seed</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;{{ .Values.seed.image.repository }}:{{ .Values.seed.image.tag }}&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>              set -e
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Seeding initial data...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              # Check if data already exists to make seed idempotent
+</span></span></span><span class=line><span class=cl><span class=sd>              EXISTING_COUNT=$(psql &#34;$DATABASE_URL&#34; -t -c &#34;SELECT COUNT(*) FROM users WHERE email = &#39;admin@example.com&#39;&#34; | tr -d &#39; &#39;)
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              if [ &#34;$EXISTING_COUNT&#34; -eq &#34;0&#34; ]; then
+</span></span></span><span class=line><span class=cl><span class=sd>                echo &#34;Creating admin user...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>                psql &#34;$DATABASE_URL&#34; -c &#34;INSERT INTO users (email, role, created_at) VALUES (&#39;admin@example.com&#39;, &#39;admin&#39;, NOW())&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              else
+</span></span></span><span class=line><span class=cl><span class=sd>                echo &#34;Admin user already exists, skipping...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              fi
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Seed completed&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DATABASE_URL</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>valueFrom</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>secretKeyRef</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.database.existingSecret | default (printf &#34;%s-db-credentials&#34; (include &#34;myapp.fullname&#34; .)) }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>key</span><span class=p>:</span><span class=w> </span><span class=l>url</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>end }}</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ Always make seed operations idempotent. If a hook fails partway through, Helm may retry it, and you don&rsquo;t want duplicate data.</p></blockquote><p>For sophisticated rollback handling, implement a rollback hook that reverts migrations on failure:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># templates/db-rollback-job.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>if .Values.migrations.rollbackEnabled }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>batch/v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Job</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-db-rollback</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>{{- <span class=l>include &#34;myapp.labels&#34; . | nindent 4 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>pre-rollback</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;-10&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>backoffLimit</span><span class=p>:</span><span class=w> </span><span class=m>1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>template</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>rollback</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;{{ .Values.migrations.image.repository }}:{{ .Values.migrations.image.tag }}&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>              set -e
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Rolling back last migration...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              # Store current version for logging
+</span></span></span><span class=line><span class=cl><span class=sd>              CURRENT=$(migrate -path /migrations -database &#34;$DATABASE_URL&#34; version 2&gt;&amp;1 | tail -1)
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Current version: $CURRENT&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              # Roll back one migration
+</span></span></span><span class=line><span class=cl><span class=sd>              migrate -path /migrations -database &#34;$DATABASE_URL&#34; down 1
+</span></span></span><span class=line><span class=cl><span class=sd>              
+</span></span></span><span class=line><span class=cl><span class=sd>              NEW=$(migrate -path /migrations -database &#34;$DATABASE_URL&#34; version 2&gt;&amp;1 | tail -1)
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;Rolled back to version: $NEW&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DATABASE_URL</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>valueFrom</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span><span class=nt>secretKeyRef</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.database.existingSecret | default (printf &#34;%s-db-credentials&#34; (include &#34;myapp.fullname&#34; .)) }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                  </span><span class=nt>key</span><span class=p>:</span><span class=w> </span><span class=l>url</span><span class=w>
+</span></span></span><span class=line><span class=cl>{{- <span class=l>end }}</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><h3 id=creating-comprehensive-helm-test-suites>Creating Comprehensive Helm Test Suites</h3><p>Helm tests validate that your deployment actually works after all resources are created. They&rsquo;re Pods with the <code>helm.sh/hook: test</code> annotation, executed via <code>helm test &lt;release></code>.</p><p>Build a multi-stage test suite that validates connectivity, health, and configuration:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span><span class=lnt>142
+</span><span class=lnt>143
+</span><span class=lnt>144
+</span><span class=lnt>145
+</span><span class=lnt>146
+</span><span class=lnt>147
+</span><span class=lnt>148
+</span><span class=lnt>149
+</span><span class=lnt>150
+</span><span class=lnt>151
+</span><span class=lnt>152
+</span><span class=lnt>153
+</span><span class=lnt>154
+</span><span class=lnt>155
+</span><span class=lnt>156
+</span><span class=lnt>157
+</span><span class=lnt>158
+</span><span class=lnt>159
+</span><span class=lnt>160
+</span><span class=lnt>161
+</span><span class=lnt>162
+</span><span class=lnt>163
+</span><span class=lnt>164
+</span><span class=lnt>165
+</span><span class=lnt>166
+</span><span class=lnt>167
+</span><span class=lnt>168
+</span><span class=lnt>169
+</span><span class=lnt>170
+</span><span class=lnt>171
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># templates/tests/test-connection.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Pod</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-test-connection</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>{{- <span class=l>include &#34;myapp.labels&#34; . | nindent 4 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>test</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;-5&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>test-api-connectivity</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>curlimages/curl:8.4.0</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>          set -e
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Testing API Connectivity ===&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test internal service DNS resolution
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Testing DNS resolution for {{ include &#34;myapp.fullname&#34; . }}...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          nslookup {{ include &#34;myapp.fullname&#34; . }}.{{ .Release.Namespace }}.svc.cluster.local
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test HTTP connectivity to health endpoint
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Testing HTTP connectivity...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          RESPONSE=$(curl -s -o /dev/null -w &#34;%{http_code}&#34; \
+</span></span></span><span class=line><span class=cl><span class=sd>            --connect-timeout 10 \
+</span></span></span><span class=line><span class=cl><span class=sd>            --max-time 30 \
+</span></span></span><span class=line><span class=cl><span class=sd>            --retry 5 \
+</span></span></span><span class=line><span class=cl><span class=sd>            --retry-delay 3 \
+</span></span></span><span class=line><span class=cl><span class=sd>            &#34;http://{{ include &#34;myapp.fullname&#34; . }}:{{ .Values.service.port }}/health&#34;)
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          if [ &#34;$RESPONSE&#34; = &#34;200&#34; ]; then
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✓ Health endpoint returned 200 OK&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          else
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✗ Health endpoint returned $RESPONSE&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          fi
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test readiness endpoint
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Testing readiness...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          READY=$(curl -s -o /dev/null -w &#34;%{http_code}&#34; \
+</span></span></span><span class=line><span class=cl><span class=sd>            &#34;http://{{ include &#34;myapp.fullname&#34; . }}:{{ .Values.service.port }}/ready&#34;)
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          if [ &#34;$READY&#34; = &#34;200&#34; ]; then
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✓ Readiness endpoint returned 200 OK&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          else
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✗ Readiness endpoint returned $READY&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          fi
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Connectivity Tests Passed ===&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nn>---</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># templates/tests/test-database.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Pod</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-test-database</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>{{- <span class=l>include &#34;myapp.labels&#34; . | nindent 4 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>test</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;0&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>test-db-connection</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>postgres:15-alpine</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>          set -e
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Testing Database Connectivity ===&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Test basic connection
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Connecting to database...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          if psql &#34;$DATABASE_URL&#34; -c &#34;SELECT 1&#34; &gt; /dev/null 2&gt;&amp;1; then
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✓ Database connection successful&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          else
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✗ Database connection failed&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          fi
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Verify schema version matches expected
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Checking schema version...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          SCHEMA_VERSION=$(psql &#34;$DATABASE_URL&#34; -t -c &#34;SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1&#34; 2&gt;/dev/null | tr -d &#39; &#39;)
+</span></span></span><span class=line><span class=cl><span class=sd>          EXPECTED_VERSION=&#34;{{ .Values.migrations.expectedVersion | default &#34;&#34; }}&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          if [ -n &#34;$EXPECTED_VERSION&#34; ] &amp;&amp; [ &#34;$SCHEMA_VERSION&#34; != &#34;$EXPECTED_VERSION&#34; ]; then
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✗ Schema version mismatch. Expected: $EXPECTED_VERSION, Got: $SCHEMA_VERSION&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          fi
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;✓ Schema version: $SCHEMA_VERSION&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Verify critical tables exist
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Verifying critical tables...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- range .Values.tests.requiredTables }}
+</span></span></span><span class=line><span class=cl><span class=sd>          if psql &#34;$DATABASE_URL&#34; -c &#34;SELECT 1 FROM {{ . }} LIMIT 1&#34; &gt; /dev/null 2&gt;&amp;1; then
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✓ Table &#39;{{ . }}&#39; exists and is accessible&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          else
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✗ Table &#39;{{ . }}&#39; missing or inaccessible&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          fi
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- end }}
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Database Tests Passed ===&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>DATABASE_URL</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>valueFrom</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>secretKeyRef</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>.Values.database.existingSecret | default (printf &#34;%s-db-credentials&#34; (include &#34;myapp.fullname&#34; .)) }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>key</span><span class=p>:</span><span class=w> </span><span class=l>url</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nn>---</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># templates/tests/test-config.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Pod</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span>{{<span class=w> </span><span class=l>include &#34;myapp.fullname&#34; . }}-test-config</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>{{- <span class=l>include &#34;myapp.labels&#34; . | nindent 4 }}</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook&#34;: </span><span class=l>test</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-weight&#34;: </span><span class=s2>&#34;5&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>&#34;helm.sh/hook-delete-policy&#34;: </span><span class=l>before-hook-creation,hook-succeeded</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>restartPolicy</span><span class=p>:</span><span class=w> </span><span class=l>Never</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>test-configuration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>curlimages/curl:8.4.0</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>          set -e
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Testing Application Configuration ===&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Fetch and validate configuration via API
+</span></span></span><span class=line><span class=cl><span class=sd>          CONFIG=$(curl -s &#34;http://{{ include &#34;myapp.fullname&#34; . }}:{{ .Values.service.port }}/api/config/public&#34;)
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Verify environment is correct
+</span></span></span><span class=line><span class=cl><span class=sd>          ENV=$(echo &#34;$CONFIG&#34; | grep -o &#39;&#34;environment&#34;:&#34;[^&#34;]*&#34;&#39; | cut -d&#39;&#34;&#39; -f4)
+</span></span></span><span class=line><span class=cl><span class=sd>          EXPECTED_ENV=&#34;{{ .Values.environment }}&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          if [ &#34;$ENV&#34; = &#34;$EXPECTED_ENV&#34; ]; then
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✓ Environment correctly set to: $ENV&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          else
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✗ Environment mismatch. Expected: $EXPECTED_ENV, Got: $ENV&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          fi
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          # Verify feature flags if applicable
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- if .Values.featureFlags }}
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;Verifying feature flags...&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- range $flag, $enabled := .Values.featureFlags }}
+</span></span></span><span class=line><span class=cl><span class=sd>          FLAG_VALUE=$(echo &#34;$CONFIG&#34; | grep -o &#39;&#34;{{ $flag }}&#34;:[^,}]*&#39; | cut -d&#39;:&#39; -f2)
+</span></span></span><span class=line><span class=cl><span class=sd>          if [ &#34;$FLAG_VALUE&#34; = &#34;{{ $enabled }}&#34; ]; then
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✓ Feature flag &#39;{{ $flag }}&#39; = {{ $enabled }}&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>          else
+</span></span></span><span class=line><span class=cl><span class=sd>            echo &#34;✗ Feature flag &#39;{{ $flag }}&#39; expected {{ $enabled }}, got $FLAG_VALUE&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>            exit 1
+</span></span></span><span class=line><span class=cl><span class=sd>          fi
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- end }}
+</span></span></span><span class=line><span class=cl><span class=sd>          {{- end }}
+</span></span></span><span class=line><span class=cl><span class=sd>          
+</span></span></span><span class=line><span class=cl><span class=sd>          echo &#34;=== Configuration Tests Passed ===&#34;</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>📝 Structure tests with hook-weight to control execution order. Run connectivity tests first (weight -5), then database tests (weight 0), then application-specific validations (weight 5+).</p></blockquote><h3 id=managing-multi-service-dependencies-with-conditions-and-aliases>Managing Multi-Service Dependencies with Conditions and Aliases</h3><p>Complex microservice architectures require sophisticated dependency management. Let&rsquo;s build a parent chart that orchestrates multiple services with conditional inclusion and value overrides.</p><p>First, define dependencies in <code>Chart.yaml</code>:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span><span class=lnt>62
+</span><span class=lnt>63
+</span><span class=lnt>64
+</span><span class=lnt>65
+</span><span class=lnt>66
+</span><span class=lnt>67
+</span><span class=lnt>68
+</span><span class=lnt>69
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># Chart.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v2</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>ecommerce-platform</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>description</span><span class=p>:</span><span class=w> </span><span class=l>Complete e-commerce platform with microservices</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=m>1.0.0</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>appVersion</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;2024.1&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>dependencies</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Core services - always required</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>api-gateway</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;2.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://charts.example.com&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Database - can use external or deploy PostgreSQL</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>postgresql</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;13.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://charts.bitnami.com/bitnami&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>postgresql.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>alias</span><span class=p>:</span><span class=w> </span><span class=l>db</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Cache - optional Redis deployment</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>redis</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;18.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://charts.bitnami.com/bitnami&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>redis.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>alias</span><span class=p>:</span><span class=w> </span><span class=l>cache</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Message queue - choose between RabbitMQ or Kafka</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>rabbitmq</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;12.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://charts.bitnami.com/bitnami&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>messageQueue.rabbitmq.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>alias</span><span class=p>:</span><span class=w> </span><span class=l>mq-rabbit</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>kafka</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;26.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://charts.bitnami.com/bitnami&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>messageQueue.kafka.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>alias</span><span class=p>:</span><span class=w> </span><span class=l>mq-kafka</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Microservices</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>user-service</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;1.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;file://../user-service&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>services.user.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>order-service</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;1.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;file://../order-service&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>services.order.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>payment-service</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;1.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;file://../payment-service&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>services.payment.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Observability stack</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>prometheus</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;25.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://prometheus-community.github.io/helm-charts&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>observability.prometheus.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>alias</span><span class=p>:</span><span class=w> </span><span class=l>metrics</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>grafana</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;7.x.x&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>repository</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;https://grafana.github.io/helm-charts&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>observability.grafana.enabled</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>alias</span><span class=p>:</span><span class=w> </span><span class=l>dashboards</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><p>Now create a comprehensive values file that configures all dependencies:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># values.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>global</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Shared values available to all subcharts</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>imageRegistry</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;registry.example.com&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>imagePullSecrets</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>registry-credentials</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>storageClass</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;fast-ssd&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Service mesh configuration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>serviceMesh</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>istio</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>mtls</span><span class=p>:</span><span class=w> </span><span class=l>STRICT</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Shared database credentials (subcharts reference these)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>database</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>host</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;db-postgresql&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>port</span><span class=p>:</span><span class=w> </span><span class=m>5432</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;ecommerce&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Shared cache configuration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>cache</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>host</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;cache-redis-master&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>port</span><span class=p>:</span><span class=w> </span><span class=m>6379</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># PostgreSQL subchart configuration (aliased as &#39;db&#39;)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>postgresql</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>  </span><span class=c># Set false to use external database</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>db</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>auth</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>postgresPassword</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;&#34;</span><span class=w>  </span><span class=c># Set via --set or external secret</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>username</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;ecommerce&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>password</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>database</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;ecommerce&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>primary</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>persistence</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>size</span><span class=p>:</span><span class=w> </span><span class=l>50Gi</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>storageClass</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;fast-ssd&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>requests</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=l>512Mi</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>cpu</span><span class=p>:</span><span class=w> </span><span class=l>250m</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>limits</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=l>2Gi</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>cpu</span><span class=p>:</span><span class=w> </span><span class=l>1000m</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>metrics</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>serviceMonitor</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>  </span><span class=c># Enable when observability.prometheus.enabled is true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># Redis subchart configuration (aliased as &#39;cache&#39;)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>redis</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>cache</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>architecture</span><span class=p>:</span><span class=w> </span><span class=l>replication</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>auth</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>password</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>master</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>persistence</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>size</span><span class=p>:</span><span class=w> </span><span class=l>10Gi</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>replica</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>replicaCount</span><span class=p>:</span><span class=w> </span><span class=m>2</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>persistence</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>size</span><span class=p>:</span><span class=w> </span><span class=l>10Gi</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>metrics</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># Message queue selection (mutually exclusive)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>messageQueue</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>rabbitmq</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>kafka</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>false</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>mq-rabbit</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>auth</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>username</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;ecommerce&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>password</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>replicaCount</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>persistence</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>size</span><span class=p>:</span><span class=w> </span><span class=l>20Gi</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>metrics</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># Microservices configuration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>services</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>user</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>order</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>payment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>enabled</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>user-service</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>replicaCount</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>image</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>tag</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;v1.2.0&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>database</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>host</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;db-postgresql&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>port</span><span class=p>:</span><span class=w> </span><span class=m>5432</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>name</span><span class=p>:</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div></article></main><script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js crossorigin=anonymous></script><script>mermaid.init(0[0],"code.language-mermaid")</script></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.158.0
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p><p class="mt-0 text-xs font-mono opacity-50">next gen → 2026-03-23</p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>
