@@ -1,0 +1,923 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/en/posts/2026-03-23-build-a-terminal-emulator-with-libghostty-ghostling-architecture/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="Build a Terminal Emulator with libghostty: Ghostling Architecture"><meta property="og:description" content="Learn to build custom terminal emulators using libghostty's C API. Explore PTY management, escape sequences, and terminal state machines with Ghostling."><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-23T09:00:00+01:00"><meta property="article:modified_time" content="2026-03-23T09:00:00+01:00"><meta property="article:tag" content="Libghostty"><meta property="article:tag" content="Terminal-Emulator"><meta property="article:tag" content="Backend"><meta property="article:tag" content="C-Programming"><meta property="article:tag" content="Beginner-Tutorial"><meta property="article:tag" content="English"><meta name=twitter:card content="summary"><meta name=twitter:title content="Build a Terminal Emulator with libghostty: Ghostling Architecture"><meta name=twitter:description content="Learn to build custom terminal emulators using libghostty's C API. Explore PTY management, escape sequences, and terminal state machines with Ghostling."><script async src="https://www.googletagmanager.com/gtag/js?id=G-T337LHMQNF"></script><script>var doNotTrack=!1,dnt=navigator.doNotTrack||window.doNotTrack||navigator.msDoNotTrack,doNotTrack=dnt=="1"||dnt=="yes";if(!doNotTrack){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date),gtag("config","G-T337LHMQNF")}</script><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - Build a Terminal Emulator with libghostty: Ghostling Architecture</title><link rel=icon href=/favicon.svg type=image/svg+xml><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><link rel=stylesheet href=/css/custom.css><script defer type=text/javascript src=/minima.b1f51601d2b23d26021d0197fc604b72ad8e88b61007a8812ae9469ee357ab59.js integrity="sha256-sfUWAdKyPSYCHQGX/GBLcq2OiLYQB6iBKulGnuNXq1k="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch{}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/en/>Home</a></li><li class="ml-2 mr-2"><a href=/en/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/en/series>Series</a></li><li class="ml-2 mr-2"><a href=/en/search>🔍</a></li><li class="ml-2 mr-2"><a href=/en/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-4">Build a Terminal Emulator with libghostty: Ghostling Architecture</h1><div class="mb-6 text-sm font-mono opacity-50"><div class=mb-1><span>2026-03-23</span>
+&#183; <span>11 min read</span>
+&#183; <span>gen:2m 35s</span> &#183; <span>tok:19648</span></div><div><a href=/en/tags/libghostty>#libghostty</a>
+<a href=/en/tags/terminal-emulator>#terminal-emulator</a>
+<a href=/en/tags/backend>#backend</a>
+<a href=/en/tags/c-programming>#c-programming</a>
+<a href=/en/tags/beginner-tutorial>#beginner-tutorial</a>
+<a href=/en/tags/english>#english</a></div></div><main class=mb-8><p>Learn to build custom terminal emulators using libghostty&rsquo;s C API. Explore PTY management, escape sequences, and terminal state machines with Ghostling.</p><article class=md><h1 id=building-your-own-terminal-emulator-with-libghostty-a-deep-dive-into-ghostlings-architecture>Building Your Own Terminal Emulator with libghostty: A Deep Dive into Ghostling&rsquo;s Architecture</h1><p>Every time you open a terminal, a sophisticated dance occurs between your shell, a pseudo-terminal device, and a rendering engine that interprets thousands of escape sequences. Most developers take this complexity for granted. But understanding how terminal emulators work opens doors to building custom developer tools, embedded terminal widgets, and specialized CLI applications that go far beyond what off-the-shelf solutions offer.</p><p>Ghostling, a minimal terminal emulator built on libghostty, provides a unique learning opportunity. Unlike bloated implementations with decades of legacy code, Ghostling strips terminal emulation to its essential components while leveraging libghostty&rsquo;s production-grade C API. This article dissects its architecture, showing you how to build terminal emulation capabilities into your own projects.</p><p>By the end, you&rsquo;ll understand PTY lifecycle management, terminal state machines, escape sequence parsing, and how modern terminal emulators bridge the gap between shell processes and pixel rendering.</p><h2 id=prerequisites>Prerequisites</h2><p>Before diving in, ensure you have:</p><ul><li><strong>C/C++ fundamentals</strong>: Pointers, memory management, structs, and basic build systems (Make/CMake)</li><li><strong>Linux/POSIX basics</strong>: File descriptors, process forking, signals</li><li><strong>Development environment</strong>: GCC/Clang, libghostty headers and libraries installed</li><li><strong>Optional</strong>: Familiarity with Zig (libghostty is written in Zig but exposes a C API)</li></ul><p>Install libghostty on Ubuntu/Debian:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span><span class=lnt>9
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Clone and build libghostty</span>
+</span></span><span class=line><span class=cl>git clone https://github.com/ghostty-org/ghostty.git
+</span></span><span class=line><span class=cl><span class=nb>cd</span> ghostty
+</span></span><span class=line><span class=cl>zig build -Doptimize<span class=o>=</span>ReleaseFast
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Install headers and library</span>
+</span></span><span class=line><span class=cl>sudo cp zig-out/lib/libghostty.* /usr/local/lib/
+</span></span><span class=line><span class=cl>sudo cp -r include/ghostty /usr/local/include/
+</span></span><span class=line><span class=cl>sudo ldconfig
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ <strong>Note</strong>: The installation commands above are illustrative. Check the official Ghostty documentation for current build instructions, as the project structure and build process may change.</p></blockquote><h2 id=architecture-and-key-concepts>Architecture and Key Concepts</h2><p>Terminal emulation involves three distinct layers working in concert. Understanding their boundaries is critical before writing any code.</p><pre tabindex=0><code>┌─────────────────────────────────────────────────────────────────┐
+│                        User Space                                │
+│  ┌──────────────────┐                                           │
+│  │  Shell Process   │◄────────stdin─────────┐                   │
+│  │  (bash/zsh/fish) │                       │                   │
+│  │                  │─────stdout/stderr────►│                   │
+│  └────────┬─────────┘                       │                   │
+│           │                                 │                   │
+│           ▼                                 │                   │
+│  ┌──────────────────┐                       │                   │
+│  │    PTY Slave     │◄──────────────────────┘                   │
+│  └────────┬─────────┘                                           │
+└───────────┼─────────────────────────────────────────────────────┘
+            │ TTY Driver
+┌───────────┼─────────────────────────────────────────────────────┐
+│           ▼              Kernel Space                            │
+│  ┌──────────────────┐                                           │
+│  │    PTY Master    │                                           │
+│  └────────┬─────────┘                                           │
+└───────────┼─────────────────────────────────────────────────────┘
+            │
+┌───────────┼─────────────────────────────────────────────────────┐
+│           ▼         Terminal Emulator (Ghostling)                │
+│  ┌──────────────────┐    ┌─────────────────┐    ┌────────────┐  │
+│  │   Input Parser   │───►│  Terminal State │───►│   Screen   │  │
+│  │   (libghostty)   │    │     Machine     │    │   Buffer   │  │
+│  └──────────────────┘    └─────────────────┘    └─────┬──────┘  │
+│                                                       │         │
+│  ┌──────────────────┐                                 ▼         │
+│  │ Keyboard/Mouse   │    ┌─────────────────┐    ┌────────────┐  │
+│  │     Input        │───►│  Input Encoder  │    │  Renderer  │  │
+│  └──────────────────┘    └────────┬────────┘    └─────┬──────┘  │
+│                                   │                   │         │
+│                                   ▼                   ▼         │
+│                          To PTY Master            Display       │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre><h3 id=the-pty-layer>The PTY Layer</h3><p>A pseudo-terminal (PTY) is a kernel-provided abstraction that emulates a hardware terminal. It consists of two endpoints:</p><ul><li><strong>Master</strong>: Controlled by the terminal emulator; receives output from and sends input to the slave</li><li><strong>Slave</strong>: Appears as a regular terminal device (<code>/dev/pts/N</code>) to the shell process</li></ul><p>When your shell writes <code>ls</code> output, it goes to the slave. The kernel routes it to the master, where your emulator reads and renders it.</p><h3 id=the-parser-layer>The Parser Layer</h3><p>Raw bytes from the PTY master contain a mix of printable text and control sequences. libghostty&rsquo;s parser transforms this byte stream into structured events:</p><ul><li><strong>Print events</strong>: Regular characters to display</li><li><strong>CSI sequences</strong>: Cursor movement, colors, scrolling (<code>\x1b[1;31m</code> for red text)</li><li><strong>OSC sequences</strong>: Window titles, clipboard operations</li><li><strong>DCS sequences</strong>: Device control, sixel graphics</li></ul><h3 id=the-state-machine>The State Machine</h3><p>Terminal state encompasses cursor position, active colors, scroll region, character attributes, and screen contents. libghostty maintains this state through a well-defined API, letting you query cells, handle reflows on resize, and manage alternate screen buffers.</p><h2 id=step-by-step-implementation>Step-by-Step Implementation</h2><h3 id=setting-up-the-pty-infrastructure>Setting Up the PTY Infrastructure</h3><p>Let&rsquo;s start with the foundation: creating and managing the PTY pair. This code handles the fork/exec sequence that spawns a shell connected to our emulator.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span><span class=lnt>142
+</span><span class=lnt>143
+</span><span class=lnt>144
+</span><span class=lnt>145
+</span><span class=lnt>146
+</span><span class=lnt>147
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=c1>// pty_manager.c - PTY lifecycle management for Ghostling
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=cp>#define _XOPEN_SOURCE 600
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdlib.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;fcntl.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;unistd.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;sys/ioctl.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;termios.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;signal.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;errno.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;string.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdio.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>master_fd</span><span class=p>;</span>                <span class=c1>// File descriptor for PTY master
+</span></span></span><span class=line><span class=cl>    <span class=kt>pid_t</span> <span class=n>child_pid</span><span class=p>;</span>              <span class=c1>// Shell process ID
+</span></span></span><span class=line><span class=cl>    <span class=k>struct</span> <span class=n>termios</span> <span class=n>orig_termios</span><span class=p>;</span>  <span class=c1>// Original terminal settings for restoration
+</span></span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>rows</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>cols</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span> <span class=n>PtyContext</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Initialize PTY and spawn shell process
+</span></span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>pty_init</span><span class=p>(</span><span class=n>PtyContext</span> <span class=o>*</span><span class=n>ctx</span><span class=p>,</span> <span class=kt>int</span> <span class=n>rows</span><span class=p>,</span> <span class=kt>int</span> <span class=n>cols</span><span class=p>,</span> <span class=k>const</span> <span class=kt>char</span> <span class=o>*</span><span class=n>shell</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>rows</span> <span class=o>=</span> <span class=n>rows</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>cols</span> <span class=o>=</span> <span class=n>cols</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span> <span class=o>=</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>child_pid</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Open PTY master using POSIX interface
+</span></span></span><span class=line><span class=cl>    <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span> <span class=o>=</span> <span class=nf>posix_openpt</span><span class=p>(</span><span class=n>O_RDWR</span> <span class=o>|</span> <span class=n>O_NOCTTY</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span> <span class=o>&lt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;posix_openpt failed&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Grant access and unlock slave
+</span></span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=nf>grantpt</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>)</span> <span class=o>&lt;</span> <span class=mi>0</span> <span class=o>||</span> <span class=nf>unlockpt</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>)</span> <span class=o>&lt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;PTY setup failed&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>close</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span> <span class=o>=</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Get slave device name
+</span></span></span><span class=line><span class=cl>    <span class=kt>char</span> <span class=o>*</span><span class=n>slave_name</span> <span class=o>=</span> <span class=nf>ptsname</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>slave_name</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;ptsname failed&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>close</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span> <span class=o>=</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Fork child process for shell
+</span></span></span><span class=line><span class=cl>    <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>child_pid</span> <span class=o>=</span> <span class=nf>fork</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>child_pid</span> <span class=o>&lt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;fork failed&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>close</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span> <span class=o>=</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>child_pid</span> <span class=o>==</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// Child process: set up slave PTY and exec shell
+</span></span></span><span class=line><span class=cl>        <span class=nf>close</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>  <span class=c1>// Child doesn&#39;t need master
+</span></span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Create new session, making child the session leader
+</span></span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nf>setsid</span><span class=p>()</span> <span class=o>&lt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nf>_exit</span><span class=p>(</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Open slave PTY - this becomes our controlling terminal
+</span></span></span><span class=line><span class=cl>        <span class=kt>int</span> <span class=n>slave_fd</span> <span class=o>=</span> <span class=nf>open</span><span class=p>(</span><span class=n>slave_name</span><span class=p>,</span> <span class=n>O_RDWR</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>slave_fd</span> <span class=o>&lt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nf>_exit</span><span class=p>(</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Set window size before shell reads it
+</span></span></span><span class=line><span class=cl>        <span class=k>struct</span> <span class=n>winsize</span> <span class=n>ws</span> <span class=o>=</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>ws_row</span> <span class=o>=</span> <span class=n>rows</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>ws_col</span> <span class=o>=</span> <span class=n>cols</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>ws_xpixel</span> <span class=o>=</span> <span class=mi>0</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>ws_ypixel</span> <span class=o>=</span> <span class=mi>0</span>
+</span></span><span class=line><span class=cl>        <span class=p>};</span>
+</span></span><span class=line><span class=cl>        <span class=nf>ioctl</span><span class=p>(</span><span class=n>slave_fd</span><span class=p>,</span> <span class=n>TIOCSWINSZ</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>ws</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Redirect standard streams to slave PTY
+</span></span></span><span class=line><span class=cl>        <span class=nf>dup2</span><span class=p>(</span><span class=n>slave_fd</span><span class=p>,</span> <span class=n>STDIN_FILENO</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>dup2</span><span class=p>(</span><span class=n>slave_fd</span><span class=p>,</span> <span class=n>STDOUT_FILENO</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>dup2</span><span class=p>(</span><span class=n>slave_fd</span><span class=p>,</span> <span class=n>STDERR_FILENO</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>slave_fd</span> <span class=o>&gt;</span> <span class=n>STDERR_FILENO</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nf>close</span><span class=p>(</span><span class=n>slave_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Set up clean environment
+</span></span></span><span class=line><span class=cl>        <span class=nf>setenv</span><span class=p>(</span><span class=s>&#34;TERM&#34;</span><span class=p>,</span> <span class=s>&#34;xterm-256color&#34;</span><span class=p>,</span> <span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>setenv</span><span class=p>(</span><span class=s>&#34;COLORTERM&#34;</span><span class=p>,</span> <span class=s>&#34;truecolor&#34;</span><span class=p>,</span> <span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Execute shell
+</span></span></span><span class=line><span class=cl>        <span class=k>const</span> <span class=kt>char</span> <span class=o>*</span><span class=n>shell_path</span> <span class=o>=</span> <span class=n>shell</span> <span class=o>?</span> <span class=nl>shell</span> <span class=p>:</span> <span class=nf>getenv</span><span class=p>(</span><span class=s>&#34;SHELL&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>shell_path</span><span class=p>)</span> <span class=n>shell_path</span> <span class=o>=</span> <span class=s>&#34;/bin/sh&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=nf>execlp</span><span class=p>(</span><span class=n>shell_path</span><span class=p>,</span> <span class=n>shell_path</span><span class=p>,</span> <span class=s>&#34;-l&#34;</span><span class=p>,</span> <span class=p>(</span><span class=kt>char</span> <span class=o>*</span><span class=p>)</span><span class=nb>NULL</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>_exit</span><span class=p>(</span><span class=mi>127</span><span class=p>);</span>  <span class=c1>// exec failed
+</span></span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Parent: set master to non-blocking for async I/O
+</span></span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>flags</span> <span class=o>=</span> <span class=nf>fcntl</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>,</span> <span class=n>F_GETFL</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>fcntl</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>,</span> <span class=n>F_SETFL</span><span class=p>,</span> <span class=n>flags</span> <span class=o>|</span> <span class=n>O_NONBLOCK</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Handle terminal resize - notify shell via SIGWINCH
+</span></span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>pty_resize</span><span class=p>(</span><span class=n>PtyContext</span> <span class=o>*</span><span class=n>ctx</span><span class=p>,</span> <span class=kt>int</span> <span class=n>rows</span><span class=p>,</span> <span class=kt>int</span> <span class=n>cols</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>rows</span> <span class=o>=</span> <span class=n>rows</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>cols</span> <span class=o>=</span> <span class=n>cols</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>struct</span> <span class=n>winsize</span> <span class=n>ws</span> <span class=o>=</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>ws_row</span> <span class=o>=</span> <span class=n>rows</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>ws_col</span> <span class=o>=</span> <span class=n>cols</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>ws_xpixel</span> <span class=o>=</span> <span class=mi>0</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>ws_ypixel</span> <span class=o>=</span> <span class=mi>0</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// This triggers SIGWINCH in the shell
+</span></span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=nf>ioctl</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>,</span> <span class=n>TIOCSWINSZ</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>ws</span><span class=p>)</span> <span class=o>&lt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;TIOCSWINSZ failed&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Clean shutdown
+</span></span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>pty_cleanup</span><span class=p>(</span><span class=n>PtyContext</span> <span class=o>*</span><span class=n>ctx</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span> <span class=o>&gt;=</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>close</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>master_fd</span> <span class=o>=</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>child_pid</span> <span class=o>&gt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// Send SIGHUP to shell (standard &#34;hangup&#34; signal)
+</span></span></span><span class=line><span class=cl>        <span class=nf>kill</span><span class=p>(</span><span class=n>ctx</span><span class=o>-&gt;</span><span class=n>child_pid</span><span class=p>,</span> <span class=n>SIGHUP</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=n>ctx</span><span class=o>-&gt;</span><span class=n>child_pid</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 <strong>Tip</strong>: Always set <code>TERM=xterm-256color</code> in the child environment. Many terminal features depend on correct terminfo detection, and xterm-256color provides broad compatibility.</p></blockquote><blockquote><p>⚠️ <strong>Warning</strong>: The <code>posix_openpt</code> approach shown here is the modern POSIX standard. Avoid the legacy BSD <code>openpty()</code> call—it has portability issues and doesn&rsquo;t work consistently across all systems.</p></blockquote><h3 id=integrating-libghosttys-parser-and-state-machine>Integrating libghostty&rsquo;s Parser and State Machine</h3><p>Now we connect libghostty to process the byte stream from the PTY master. This is where escape sequences become structured data.</p><blockquote><p>⚠️ <strong>Important</strong>: The following code demonstrates the conceptual API structure. The actual libghostty API may differ—consult the official documentation and header files for the correct function signatures and types.</p></blockquote><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span><span class=lnt>142
+</span><span class=lnt>143
+</span><span class=lnt>144
+</span><span class=lnt>145
+</span><span class=lnt>146
+</span><span class=lnt>147
+</span><span class=lnt>148
+</span><span class=lnt>149
+</span><span class=lnt>150
+</span><span class=lnt>151
+</span><span class=lnt>152
+</span><span class=lnt>153
+</span><span class=lnt>154
+</span><span class=lnt>155
+</span><span class=lnt>156
+</span><span class=lnt>157
+</span><span class=lnt>158
+</span><span class=lnt>159
+</span><span class=lnt>160
+</span><span class=lnt>161
+</span><span class=lnt>162
+</span><span class=lnt>163
+</span><span class=lnt>164
+</span><span class=lnt>165
+</span><span class=lnt>166
+</span><span class=lnt>167
+</span><span class=lnt>168
+</span><span class=lnt>169
+</span><span class=lnt>170
+</span><span class=lnt>171
+</span><span class=lnt>172
+</span><span class=lnt>173
+</span><span class=lnt>174
+</span><span class=lnt>175
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=c1>// terminal_core.c - libghostty integration for terminal state management
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;ghostty/ghostty.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;string.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdio.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;errno.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;unistd.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Forward declaration from pty_manager.c
+</span></span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=n>PtyContext</span> <span class=n>PtyContext</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>ghostty_surface_t</span> <span class=n>surface</span><span class=p>;</span>      <span class=c1>// libghostty surface handle
+</span></span></span><span class=line><span class=cl>    <span class=kt>ghostty_config_t</span> <span class=n>config</span><span class=p>;</span>        <span class=c1>// Terminal configuration
+</span></span></span><span class=line><span class=cl>    <span class=n>PtyContext</span> <span class=o>*</span><span class=n>pty</span><span class=p>;</span>                <span class=c1>// Our PTY context from above
+</span></span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Callbacks for rendering layer
+</span></span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=p>(</span><span class=o>*</span><span class=n>on_damage</span><span class=p>)(</span><span class=kt>int</span> <span class=n>row</span><span class=p>,</span> <span class=kt>int</span> <span class=n>col</span><span class=p>,</span> <span class=kt>int</span> <span class=n>width</span><span class=p>,</span> <span class=kt>int</span> <span class=n>height</span><span class=p>,</span> <span class=kt>void</span> <span class=o>*</span><span class=n>userdata</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=p>(</span><span class=o>*</span><span class=n>on_title_change</span><span class=p>)(</span><span class=k>const</span> <span class=kt>char</span> <span class=o>*</span><span class=n>title</span><span class=p>,</span> <span class=kt>void</span> <span class=o>*</span><span class=n>userdata</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=o>*</span><span class=n>userdata</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Buffer for batching PTY reads
+</span></span></span><span class=line><span class=cl>    <span class=kt>uint8_t</span> <span class=n>read_buffer</span><span class=p>[</span><span class=mi>65536</span><span class=p>];</span>
+</span></span><span class=line><span class=cl><span class=p>}</span> <span class=n>TerminalCore</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Callback: libghostty notifies us of screen damage
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>void</span> <span class=nf>damage_callback</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>    <span class=kt>ghostty_surface_t</span> <span class=n>surface</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=n>x</span><span class=p>,</span> <span class=kt>uint32_t</span> <span class=n>y</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=n>width</span><span class=p>,</span> <span class=kt>uint32_t</span> <span class=n>height</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=o>*</span><span class=n>userdata</span>
+</span></span><span class=line><span class=cl><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span> <span class=o>=</span> <span class=p>(</span><span class=n>TerminalCore</span> <span class=o>*</span><span class=p>)</span><span class=n>userdata</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>on_damage</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>core</span><span class=o>-&gt;</span><span class=nf>on_damage</span><span class=p>((</span><span class=kt>int</span><span class=p>)</span><span class=n>y</span><span class=p>,</span> <span class=p>(</span><span class=kt>int</span><span class=p>)</span><span class=n>x</span><span class=p>,</span> <span class=p>(</span><span class=kt>int</span><span class=p>)</span><span class=n>width</span><span class=p>,</span> <span class=p>(</span><span class=kt>int</span><span class=p>)</span><span class=n>height</span><span class=p>,</span> <span class=n>core</span><span class=o>-&gt;</span><span class=n>userdata</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Callback: window title changed via OSC sequence
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>void</span> <span class=nf>title_callback</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>    <span class=kt>ghostty_surface_t</span> <span class=n>surface</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=k>const</span> <span class=kt>char</span> <span class=o>*</span><span class=n>title</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=o>*</span><span class=n>userdata</span>
+</span></span><span class=line><span class=cl><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span> <span class=o>=</span> <span class=p>(</span><span class=n>TerminalCore</span> <span class=o>*</span><span class=p>)</span><span class=n>userdata</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>on_title_change</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>core</span><span class=o>-&gt;</span><span class=nf>on_title_change</span><span class=p>(</span><span class=n>title</span><span class=p>,</span> <span class=n>core</span><span class=o>-&gt;</span><span class=n>userdata</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Initialize terminal core with libghostty
+</span></span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>terminal_core_init</span><span class=p>(</span><span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span><span class=p>,</span> <span class=n>PtyContext</span> <span class=o>*</span><span class=n>pty</span><span class=p>,</span> <span class=kt>int</span> <span class=n>rows</span><span class=p>,</span> <span class=kt>int</span> <span class=n>cols</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>memset</span><span class=p>(</span><span class=n>core</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=o>*</span><span class=n>core</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>    <span class=n>core</span><span class=o>-&gt;</span><span class=n>pty</span> <span class=o>=</span> <span class=n>pty</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Create configuration
+</span></span></span><span class=line><span class=cl>    <span class=kt>ghostty_config_t</span> <span class=n>config</span> <span class=o>=</span> <span class=nf>ghostty_config_new</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>config</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>fprintf</span><span class=p>(</span><span class=n>stderr</span><span class=p>,</span> <span class=s>&#34;Failed to create ghostty config</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Configure terminal parameters
+</span></span></span><span class=line><span class=cl>    <span class=nf>ghostty_config_set_int</span><span class=p>(</span><span class=n>config</span><span class=p>,</span> <span class=s>&#34;scrollback-lines&#34;</span><span class=p>,</span> <span class=mi>10000</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>ghostty_config_set_bool</span><span class=p>(</span><span class=n>config</span><span class=p>,</span> <span class=s>&#34;mouse-tracking&#34;</span><span class=p>,</span> <span class=nb>true</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>ghostty_config_set_string</span><span class=p>(</span><span class=n>config</span><span class=p>,</span> <span class=s>&#34;term&#34;</span><span class=p>,</span> <span class=s>&#34;xterm-256color&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=n>core</span><span class=o>-&gt;</span><span class=n>config</span> <span class=o>=</span> <span class=n>config</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Create surface (the actual terminal state machine)
+</span></span></span><span class=line><span class=cl>    <span class=kt>ghostty_surface_options_t</span> <span class=n>opts</span> <span class=o>=</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>rows</span> <span class=o>=</span> <span class=n>rows</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>cols</span> <span class=o>=</span> <span class=n>cols</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>config</span> <span class=o>=</span> <span class=n>config</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>userdata</span> <span class=o>=</span> <span class=n>core</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>damage_callback</span> <span class=o>=</span> <span class=n>damage_callback</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>title_callback</span> <span class=o>=</span> <span class=n>title_callback</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=n>core</span><span class=o>-&gt;</span><span class=n>surface</span> <span class=o>=</span> <span class=nf>ghostty_surface_new</span><span class=p>(</span><span class=o>&amp;</span><span class=n>opts</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>fprintf</span><span class=p>(</span><span class=n>stderr</span><span class=p>,</span> <span class=s>&#34;Failed to create ghostty surface</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>ghostty_config_free</span><span class=p>(</span><span class=n>config</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=n>core</span><span class=o>-&gt;</span><span class=n>config</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Process incoming data from PTY - this is the main parsing entry point
+</span></span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>terminal_core_process_pty_data</span><span class=p>(</span><span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>ssize_t</span> <span class=n>bytes_read</span> <span class=o>=</span> <span class=nf>read</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=n>core</span><span class=o>-&gt;</span><span class=n>pty</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=n>core</span><span class=o>-&gt;</span><span class=n>read_buffer</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>sizeof</span><span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>read_buffer</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=p>);</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>bytes_read</span> <span class=o>&lt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>errno</span> <span class=o>==</span> <span class=n>EAGAIN</span> <span class=o>||</span> <span class=n>errno</span> <span class=o>==</span> <span class=n>EWOULDBLOCK</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>  <span class=c1>// No data available (non-blocking)
+</span></span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>  <span class=c1>// Real error
+</span></span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>bytes_read</span> <span class=o>==</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>2</span><span class=p>;</span>  <span class=c1>// EOF - shell exited
+</span></span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Feed data to libghostty parser
+</span></span></span><span class=line><span class=cl>    <span class=c1>// This triggers the state machine and may invoke damage_callback
+</span></span></span><span class=line><span class=cl>    <span class=nf>ghostty_surface_feed</span><span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>,</span> <span class=n>core</span><span class=o>-&gt;</span><span class=n>read_buffer</span><span class=p>,</span> <span class=p>(</span><span class=kt>size_t</span><span class=p>)</span><span class=n>bytes_read</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=p>(</span><span class=kt>int</span><span class=p>)</span><span class=n>bytes_read</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Send keyboard input to the PTY (and thus to the shell)
+</span></span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>terminal_core_send_input</span><span class=p>(</span><span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span><span class=p>,</span> <span class=k>const</span> <span class=kt>char</span> <span class=o>*</span><span class=n>data</span><span class=p>,</span> <span class=kt>size_t</span> <span class=n>len</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>ssize_t</span> <span class=n>written</span> <span class=o>=</span> <span class=nf>write</span><span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>pty</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>,</span> <span class=n>data</span><span class=p>,</span> <span class=n>len</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>written</span> <span class=o>&lt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;write to PTY failed&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=p>(</span><span class=kt>int</span><span class=p>)</span><span class=n>written</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Handle keyboard events with proper encoding
+</span></span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>terminal_core_key_event</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>    <span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=n>keycode</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=n>modifiers</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>bool</span> <span class=n>pressed</span>
+</span></span><span class=line><span class=cl><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>pressed</span><span class=p>)</span> <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>  <span class=c1>// We typically only care about key presses
+</span></span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Let libghostty encode the key sequence
+</span></span></span><span class=line><span class=cl>    <span class=kt>char</span> <span class=n>encoded</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=kt>size_t</span> <span class=n>len</span> <span class=o>=</span> <span class=nf>ghostty_surface_encode_key</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=n>core</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=n>keycode</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=n>modifiers</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=n>encoded</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>sizeof</span><span class=p>(</span><span class=n>encoded</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=p>);</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>len</span> <span class=o>&gt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nf>terminal_core_send_input</span><span class=p>(</span><span class=n>core</span><span class=p>,</span> <span class=n>encoded</span><span class=p>,</span> <span class=n>len</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Query a specific cell for rendering
+</span></span></span><span class=line><span class=cl><span class=kt>ghostty_cell_t</span> <span class=nf>terminal_core_get_cell</span><span class=p>(</span><span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span><span class=p>,</span> <span class=kt>int</span> <span class=n>row</span><span class=p>,</span> <span class=kt>int</span> <span class=n>col</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>ghostty_surface_get_cell</span><span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>,</span> <span class=n>row</span><span class=p>,</span> <span class=n>col</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Handle resize
+</span></span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>terminal_core_resize</span><span class=p>(</span><span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span><span class=p>,</span> <span class=kt>int</span> <span class=n>rows</span><span class=p>,</span> <span class=kt>int</span> <span class=n>cols</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>ghostty_surface_resize</span><span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>,</span> <span class=n>rows</span><span class=p>,</span> <span class=n>cols</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>pty_resize</span><span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>pty</span><span class=p>,</span> <span class=n>rows</span><span class=p>,</span> <span class=n>cols</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Cleanup
+</span></span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>terminal_core_cleanup</span><span class=p>(</span><span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>ghostty_surface_free</span><span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=n>core</span><span class=o>-&gt;</span><span class=n>surface</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>config</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>ghostty_config_free</span><span class=p>(</span><span class=n>core</span><span class=o>-&gt;</span><span class=n>config</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=n>core</span><span class=o>-&gt;</span><span class=n>config</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>📝 <strong>Note</strong>: The <code>ghostty_surface_feed()</code> function is the heart of terminal emulation. It parses the byte stream, updates internal state, and triggers callbacks for any visible changes. This single call handles hundreds of escape sequence types.</p></blockquote><h3 id=building-the-rendering-pipeline>Building the Rendering Pipeline</h3><p>The final piece connects terminal state to pixels. This example uses a simple framebuffer approach, but the pattern adapts to any graphics API.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=c1>// renderer.c - Convert terminal state to visual output
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdint.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdlib.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;string.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdbool.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Forward declarations (these types come from libghostty)
+</span></span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=n>ghostty_cell</span> <span class=kt>ghostty_cell_t</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=n>ghostty_color</span> <span class=kt>ghostty_color_t</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=n>ghostty_cursor</span> <span class=kt>ghostty_cursor_t</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Color type enumeration (simplified representation)
+</span></span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>enum</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>GHOSTTY_COLOR_DEFAULT_FG</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=n>GHOSTTY_COLOR_DEFAULT_BG</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=n>GHOSTTY_COLOR_INDEXED</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=n>GHOSTTY_COLOR_RGB</span>
+</span></span><span class=line><span class=cl><span class=p>}</span> <span class=kt>ghostty_color_type_t</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Cell flag for inverse video
+</span></span></span><span class=line><span class=cl><span class=cp>#define GHOSTTY_CELL_INVERSE 0x01
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Framebuffer
+</span></span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=o>*</span><span class=n>pixels</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>pixel_width</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>pixel_height</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Font metrics
+</span></span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>cell_width</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>cell_height</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>rows</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>cols</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Dirty tracking for partial updates
+</span></span></span><span class=line><span class=cl>    <span class=kt>bool</span> <span class=o>*</span><span class=n>dirty_rows</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Color palette (256 colors + default fg/bg)
+</span></span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=n>palette</span><span class=p>[</span><span class=mi>258</span><span class=p>];</span>
+</span></span><span class=line><span class=cl><span class=p>}</span> <span class=n>Renderer</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Convert libghostty color to RGBA
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>uint32_t</span> <span class=nf>color_to_rgba</span><span class=p>(</span><span class=kt>ghostty_color_t</span> <span class=n>color</span><span class=p>,</span> <span class=kt>uint32_t</span> <span class=o>*</span><span class=n>palette</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>switch</span> <span class=p>(</span><span class=n>color</span><span class=p>.</span><span class=n>type</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=nl>GHOSTTY_COLOR_DEFAULT_FG</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=n>palette</span><span class=p>[</span><span class=mi>256</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=nl>GHOSTTY_COLOR_DEFAULT_BG</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=n>palette</span><span class=p>[</span><span class=mi>257</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=nl>GHOSTTY_COLOR_INDEXED</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=n>palette</span><span class=p>[</span><span class=n>color</span><span class=p>.</span><span class=n>index</span><span class=p>];</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=nl>GHOSTTY_COLOR_RGB</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=p>((</span><span class=kt>uint32_t</span><span class=p>)</span><span class=n>color</span><span class=p>.</span><span class=n>r</span> <span class=o>&lt;&lt;</span> <span class=mi>24</span><span class=p>)</span> <span class=o>|</span> 
+</span></span><span class=line><span class=cl>                   <span class=p>((</span><span class=kt>uint32_t</span><span class=p>)</span><span class=n>color</span><span class=p>.</span><span class=n>g</span> <span class=o>&lt;&lt;</span> <span class=mi>16</span><span class=p>)</span> <span class=o>|</span> 
+</span></span><span class=line><span class=cl>                   <span class=p>((</span><span class=kt>uint32_t</span><span class=p>)</span><span class=n>color</span><span class=p>.</span><span class=n>b</span> <span class=o>&lt;&lt;</span> <span class=mi>8</span><span class=p>)</span> <span class=o>|</span> <span class=mh>0xFF</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=k>default</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=mh>0xFFFFFFFF</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Initialize default xterm-256color palette
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>void</span> <span class=nf>init_palette</span><span class=p>(</span><span class=kt>uint32_t</span> <span class=o>*</span><span class=n>palette</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=c1>// Standard 16 colors
+</span></span></span><span class=line><span class=cl>    <span class=k>static</span> <span class=k>const</span> <span class=kt>uint32_t</span> <span class=n>base16</span><span class=p>[]</span> <span class=o>=</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=mh>0x000000FF</span><span class=p>,</span> <span class=mh>0xCD0000FF</span><span class=p>,</span> <span class=mh>0x00CD00FF</span><span class=p>,</span> <span class=mh>0xCDCD00FF</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=mh>0x0000EEFF</span><span class=p>,</span> <span class=mh>0xCD00CDFF</span><span class=p>,</span> <span class=mh>0x00CDCDFF</span><span class=p>,</span> <span class=mh>0xE5E5E5FF</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=mh>0x7F7F7FFF</span><span class=p>,</span> <span class=mh>0xFF0000FF</span><span class=p>,</span> <span class=mh>0x00FF00FF</span><span class=p>,</span> <span class=mh>0xFFFF00FF</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=mh>0x5C5CFFFF</span><span class=p>,</span> <span class=mh>0xFF00FFFF</span><span class=p>,</span> <span class=mh>0x00FFFFFF</span><span class=p>,</span> <span class=mh>0xFFFFFFFF</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>    <span class=nf>memcpy</span><span class=p>(</span><span class=n>palette</span><span class=p>,</span> <span class=n>base16</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=n>base16</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// 216 color cube (6x6x6)
+</span></span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=p>(</span><span class=kt>int</span> <span class=n>r</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span> <span class=n>r</span> <span class=o>&lt;</span> <span class=mi>6</span><span class=p>;</span> <span class=n>r</span><span class=o>++</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>for</span> <span class=p>(</span><span class=kt>int</span> <span class=n>g</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span> <span class=n>g</span> <span class=o>&lt;</span> <span class=mi>6</span><span class=p>;</span> <span class=n>g</span><span class=o>++</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>for</span> <span class=p>(</span><span class=kt>int</span> <span class=n>b</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span> <span class=n>b</span> <span class=o>&lt;</span> <span class=mi>6</span><span class=p>;</span> <span class=n>b</span><span class=o>++</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>                <span class=kt>int</span> <span class=n>idx</span> <span class=o>=</span> <span class=mi>16</span> <span class=o>+</span> <span class=n>r</span> <span class=o>*</span> <span class=mi>36</span> <span class=o>+</span> <span class=n>g</span> <span class=o>*</span> <span class=mi>6</span> <span class=o>+</span> <span class=n>b</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>                <span class=kt>uint8_t</span> <span class=n>rv</span> <span class=o>=</span> <span class=n>r</span> <span class=o>?</span> <span class=p>(</span><span class=kt>uint8_t</span><span class=p>)(</span><span class=n>r</span> <span class=o>*</span> <span class=mi>40</span> <span class=o>+</span> <span class=mi>55</span><span class=p>)</span> <span class=o>:</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>                <span class=kt>uint8_t</span> <span class=n>gv</span> <span class=o>=</span> <span class=n>g</span> <span class=o>?</span> <span class=p>(</span><span class=kt>uint8_t</span><span class=p>)(</span><span class=n>g</span> <span class=o>*</span> <span class=mi>40</span> <span class=o>+</span> <span class=mi>55</span><span class=p>)</span> <span class=o>:</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>                <span class=kt>uint8_t</span> <span class=n>bv</span> <span class=o>=</span> <span class=n>b</span> <span class=o>?</span> <span class=p>(</span><span class=kt>uint8_t</span><span class=p>)(</span><span class=n>b</span> <span class=o>*</span> <span class=mi>40</span> <span class=o>+</span> <span class=mi>55</span><span class=p>)</span> <span class=o>:</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>                <span class=n>palette</span><span class=p>[</span><span class=n>idx</span><span class=p>]</span> <span class=o>=</span> <span class=p>((</span><span class=kt>uint32_t</span><span class=p>)</span><span class=n>rv</span> <span class=o>&lt;&lt;</span> <span class=mi>24</span><span class=p>)</span> <span class=o>|</span> 
+</span></span><span class=line><span class=cl>                               <span class=p>((</span><span class=kt>uint32_t</span><span class=p>)</span><span class=n>gv</span> <span class=o>&lt;&lt;</span> <span class=mi>16</span><span class=p>)</span> <span class=o>|</span> 
+</span></span><span class=line><span class=cl>                               <span class=p>((</span><span class=kt>uint32_t</span><span class=p>)</span><span class=n>bv</span> <span class=o>&lt;&lt;</span> <span class=mi>8</span><span class=p>)</span> <span class=o>|</span> <span class=mh>0xFF</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// 24 grayscale
+</span></span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=p>(</span><span class=kt>int</span> <span class=n>i</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span> <span class=n>i</span> <span class=o>&lt;</span> <span class=mi>24</span><span class=p>;</span> <span class=n>i</span><span class=o>++</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=kt>uint8_t</span> <span class=n>v</span> <span class=o>=</span> <span class=p>(</span><span class=kt>uint8_t</span><span class=p>)(</span><span class=n>i</span> <span class=o>*</span> <span class=mi>10</span> <span class=o>+</span> <span class=mi>8</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=n>palette</span><span class=p>[</span><span class=mi>232</span> <span class=o>+</span> <span class=n>i</span><span class=p>]</span> <span class=o>=</span> <span class=p>((</span><span class=kt>uint32_t</span><span class=p>)</span><span class=n>v</span> <span class=o>&lt;&lt;</span> <span class=mi>24</span><span class=p>)</span> <span class=o>|</span> 
+</span></span><span class=line><span class=cl>                           <span class=p>((</span><span class=kt>uint32_t</span><span class=p>)</span><span class=n>v</span> <span class=o>&lt;&lt;</span> <span class=mi>16</span><span class=p>)</span> <span class=o>|</span> 
+</span></span><span class=line><span class=cl>                           <span class=p>((</span><span class=kt>uint32_t</span><span class=p>)</span><span class=n>v</span> <span class=o>&lt;&lt;</span> <span class=mi>8</span><span class=p>)</span> <span class=o>|</span> <span class=mh>0xFF</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Default foreground (white) and background (black)
+</span></span></span><span class=line><span class=cl>    <span class=n>palette</span><span class=p>[</span><span class=mi>256</span><span class=p>]</span> <span class=o>=</span> <span class=mh>0xFFFFFFFF</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>palette</span><span class=p>[</span><span class=mi>257</span><span class=p>]</span> <span class=o>=</span> <span class=mh>0x000000FF</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>renderer_init</span><span class=p>(</span><span class=n>Renderer</span> <span class=o>*</span><span class=n>r</span><span class=p>,</span> <span class=n>TerminalCore</span> <span class=o>*</span><span class=n>core</span><span class=p>,</span> <span class=kt>int</span> <span class=n>rows</span><span class=p>,</span> <span class=kt>int</span> <span class=n>cols</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>memset</span><span class=p>(</span><span class=n>r</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=o>*</span><span class=n>r</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>    <span class=n>r</span><span class=o>-&gt;</span><span class=n>core</span> <span class=o>=</span> <span class=n>core</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>r</span><span class=o>-&gt;</span><span class=n>rows</span> <span class=o>=</span> <span class=n>rows</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>r</span><span class=o>-&gt;</span><span class=n>cols</span> <span class=o>=</span> <span class=n>cols</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>r</span><span class=o>-&gt;</span><span class=n>cell_width</span> <span class=o>=</span> <span class=mi>8</span><span class=p>;</span>   <span class=c1>// Assuming
+</span></span></span></code></pre></td></tr></table></div></div></article></main><script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js crossorigin=anonymous></script><script>mermaid.init(0[0],"code.language-mermaid")</script></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.158.0
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p><p class="mt-0 text-xs font-mono opacity-50">next gen → 2026-03-26</p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>

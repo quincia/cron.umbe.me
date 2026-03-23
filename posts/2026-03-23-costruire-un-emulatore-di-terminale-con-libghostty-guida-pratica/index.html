@@ -1,0 +1,829 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/posts/2026-03-23-costruire-un-emulatore-di-terminale-con-libghostty-guida-pratica/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="Costruire un Emulatore di Terminale con libghostty: Guida Pratica"><meta property="og:description" content="Scopri come funziona l'emulazione terminale costruendo Ghostling con libghostty. Pseudo-terminali, escape sequence ANSI e architettura spiegati passo passo."><meta property="og:locale" content="it"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-23T08:00:00+01:00"><meta property="article:modified_time" content="2026-03-23T08:00:00+01:00"><meta property="article:tag" content="Libghostty"><meta property="article:tag" content="Terminal-Emulator"><meta property="article:tag" content="C-Programming"><meta property="article:tag" content="Backend"><meta property="article:tag" content="Beginner-Tutorial"><meta property="article:tag" content="Italiano"><meta name=twitter:card content="summary"><meta name=twitter:title content="Costruire un Emulatore di Terminale con libghostty: Guida Pratica"><meta name=twitter:description content="Scopri come funziona l'emulazione terminale costruendo Ghostling con libghostty. Pseudo-terminali, escape sequence ANSI e architettura spiegati passo passo."><script async src="https://www.googletagmanager.com/gtag/js?id=G-T337LHMQNF"></script><script>var doNotTrack=!1,dnt=navigator.doNotTrack||window.doNotTrack||navigator.msDoNotTrack,doNotTrack=dnt=="1"||dnt=="yes";if(!doNotTrack){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date),gtag("config","G-T337LHMQNF")}</script><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - Costruire un Emulatore di Terminale con libghostty: Guida Pratica</title><link rel=icon href=/favicon.svg type=image/svg+xml><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><link rel=stylesheet href=/css/custom.css><script defer type=text/javascript src=/minima.0fd13d0809f6d20301e1285f3f521ceb44e122bca7ab703c4178b5220be4bc9b.js integrity="sha256-D9E9CAn20gMB4ShfP1Ic60ThIrynq3A8QXi1IgvkvJs="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch{}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/>Home</a></li><li class="ml-2 mr-2"><a href=/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/series>Serie</a></li><li class="ml-2 mr-2"><a href=/search>🔍</a></li><li class="ml-2 mr-2"><a href=/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-4">Costruire un Emulatore di Terminale con libghostty: Guida Pratica</h1><div class="mb-6 text-sm font-mono opacity-50"><div class=mb-1><span>2026-03-23</span>
+&#183; <span>11 min read</span>
+&#183; <span>gen:2m 43s</span> &#183; <span>tok:20021</span></div><div><a href=/tags/libghostty>#libghostty</a>
+<a href=/tags/terminal-emulator>#terminal-emulator</a>
+<a href=/tags/c-programming>#c-programming</a>
+<a href=/tags/backend>#backend</a>
+<a href=/tags/beginner-tutorial>#beginner-tutorial</a>
+<a href=/tags/italiano>#italiano</a></div></div><main class=mb-8><p>Scopri come funziona l&rsquo;emulazione terminale costruendo Ghostling con libghostty. Pseudo-terminali, escape sequence ANSI e architettura spiegati passo passo.</p><article class=md><h1 id=building-your-own-terminal-emulator-with-libghostty-a-deep-dive-into-ghostlings-architecture>Building Your Own Terminal Emulator with libghostty: A Deep Dive into Ghostling&rsquo;s Architecture</h1><p>Ogni giorno apri il terminale decine di volte senza pensarci. Digiti comandi, vedi output colorato, scorri tra migliaia di righe di log. Ma cosa succede realmente tra la pressione di un tasto e i pixel che appaiono sullo schermo?</p><p>La risposta coinvolge pseudo-terminali, parsing di escape sequence ANSI, gestione di buffer circolari e un intero sistema di comunicazione inter-processo che risale agli anni &lsquo;70 ma rimane fondamentale nell&rsquo;infrastruttura moderna.</p><p>Ghostling rappresenta un&rsquo;opportunità unica: un emulatore di terminale minimale costruito su libghostty, la libreria C che alimenta Ghostty, uno dei terminali più performanti disponibili oggi. Studiare questa implementazione ti permetterà di capire come funziona davvero l&rsquo;emulazione terminale e, soprattutto, ti darà gli strumenti per costruire soluzioni custom: terminali embedded in IDE, tool CLI specializzati o widget terminale per applicazioni desktop.</p><h2 id=prerequisiti>Prerequisiti</h2><p>Per seguire questo articolo avrai bisogno di:</p><ul><li><strong>Competenze</strong>: familiarità con C e concetti base di sistemi operativi Unix-like (processi, file descriptor)</li><li><strong>Ambiente</strong>: Linux o macOS (Windows con WSL2 funziona, ma con limitazioni)</li><li><strong>Strumenti</strong>: GCC o Clang, Make, Git</li><li><strong>Librerie</strong>: libghostty (la compileremo dai sorgenti)</li></ul><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Verifica di avere gli strumenti necessari</span>
+</span></span><span class=line><span class=cl>gcc --version          <span class=c1># GCC 11+ o Clang 14+</span>
+</span></span><span class=line><span class=cl>make --version         <span class=c1># GNU Make 4+</span>
+</span></span><span class=line><span class=cl>pkg-config --version   <span class=c1># Per gestire le dipendenze</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 Se non hai mai lavorato con PTY o file descriptor, non preoccuparti: spiegherò ogni concetto quando diventa rilevante.</p></blockquote><h2 id=architettura-e-concetti-chiave>Architettura e concetti chiave</h2><p>Prima di scrivere codice, devi capire i tre pilastri dell&rsquo;emulazione terminale:</p><ol><li><strong>PTY (Pseudo-Terminal)</strong>: il canale di comunicazione bidirezionale tra shell ed emulatore</li><li><strong>State Machine</strong>: il parser che interpreta i byte in arrivo (testo, colori, movimento cursore)</li><li><strong>Rendering Pipeline</strong>: la trasformazione dello stato interno in pixel sullo schermo</li></ol><pre tabindex=0><code>┌─────────────────────────────────────────────────────────────────────────────┐
+│                              USER INPUT                                     │
+│                                                                             │
+│    ┌────���─────┐         ┌──────────────┐                                    │
+│    │ Tastiera │────────▶│ Eventi Input │                                    │
+│    └──────────┘         └──────┬───────┘                                    │
+└─────────────────────────────────┼───────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    TERMINAL EMULATOR (Ghostling)                            │
+│                                                                             │
+│    ┌────────────┐       ┌────────────┐       ┌─────────────────┐            │
+│    │ PTY Master │◀─────▶│ PTY Slave  │◀─────▶│  Shell Process  │            │
+│    │            │       │            │       │  (bash/zsh/fish)│            │
+│    └─────┬──────┘       └────────────┘       └────────┬────────┘            │
+│          │                                            │                     │
+│          │ Byte Stream                                │                     │
+│          ▼                                            ▼                     │
+│    ┌─────────────────────┐                   ┌────────────────┐             │
+│    │ Escape Sequence     │                   │ Programmi CLI  │             │
+│    │ Parser (libghostty) │                   │ (ls, vim, etc) │             │
+│    └──────────┬──────────┘                   └────────────────┘             │
+│               │                                                             │
+│               ▼                                                             │
+│    ┌─────────────────────┐                                                  │
+│    │  Terminal State     │                                                  │
+│    │  (colori, cursore)  │                                                  │
+│    └──────────┬──────────┘                                                  │
+│               │                                                             │
+│               ▼                                                             │
+│    ┌─────────────────────┐                                                  │
+│    │ Character Grid      │                                                  │
+│    │ Buffer              │                                                  │
+│    └──────────┬──────────┘                                                  │
+│               │                                                             │
+│               ▼                                                             │
+│    ┌─────────────────────┐                                                  │
+│    │ Rendering Pipeline  │                                                  │
+│    └──────────┬──────────┘                                                  │
+└───────────────┼─────────────────────────────────────────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              OUTPUT                                         │
+│                                                                             │
+│                         ┌─────────┐                                         │
+│                         │ Display │                                         │
+│                         └─────────┘                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+</code></pre><p>Il flusso è circolare: l&rsquo;utente preme un tasto → l&rsquo;emulatore scrive sul PTY master → il kernel inoltra al PTY slave → la shell legge, elabora e scrive l&rsquo;output → l&rsquo;output torna al PTY master → il parser interpreta le escape sequence → lo stato del terminale si aggiorna → il renderer disegna.</p><h3 id=come-libghostty-si-inserisce-in-questo-flusso>Come libghostty si inserisce in questo flusso</h3><p>libghostty astrae la complessità del parser e della gestione dello stato. Tu ti occupi di:</p><ul><li>Creare e gestire il PTY</li><li>Passare i byte ricevuti a libghostty</li><li>Leggere lo stato risultante e renderizzarlo</li></ul><p>libghostty si occupa di:</p><ul><li>Parsing completo delle escape sequence (ANSI, xterm, VT100)</li><li>Gestione del character grid (inserimenti, cancellazioni, scroll)</li><li>Tracking di attributi (colori, grassetto, sottolineato)</li><li>Gestione delle modalità terminale (alternate screen, mouse reporting)</li></ul><h2 id=implementazione-passo-passo>Implementazione passo-passo</h2><h3 id=sezione-1-setup-del-pty-e-fork-del-processo-shell>Sezione 1: Setup del PTY e fork del processo shell</h3><p>Il PTY è il cuore di tutto. Senza un PTY funzionante, non hai un terminale — hai solo un programma che stampa testo.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span><span class=lnt>142
+</span><span class=lnt>143
+</span><span class=lnt>144
+</span><span class=lnt>145
+</span><span class=lnt>146
+</span><span class=lnt>147
+</span><span class=lnt>148
+</span><span class=lnt>149
+</span><span class=lnt>150
+</span><span class=lnt>151
+</span><span class=lnt>152
+</span><span class=lnt>153
+</span><span class=lnt>154
+</span><span class=lnt>155
+</span><span class=lnt>156
+</span><span class=lnt>157
+</span><span class=lnt>158
+</span><span class=lnt>159
+</span><span class=lnt>160
+</span><span class=lnt>161
+</span><span class=lnt>162
+</span><span class=lnt>163
+</span><span class=lnt>164
+</span><span class=lnt>165
+</span><span class=lnt>166
+</span><span class=lnt>167
+</span><span class=lnt>168
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=c1>// pty_manager.c - Gestione del ciclo di vita PTY
+</span></span></span><span class=line><span class=cl><span class=cp>#define _XOPEN_SOURCE 600
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdlib.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;fcntl.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;unistd.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;sys/ioctl.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;termios.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;signal.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;errno.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;string.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdio.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Struttura che rappresenta il nostro PTY
+</span></span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>master_fd</span><span class=p>;</span>          <span class=c1>// File descriptor lato emulatore
+</span></span></span><span class=line><span class=cl>    <span class=kt>pid_t</span> <span class=n>child_pid</span><span class=p>;</span>        <span class=c1>// PID del processo shell
+</span></span></span><span class=line><span class=cl>    <span class=kt>char</span> <span class=n>slave_name</span><span class=p>[</span><span class=mi>256</span><span class=p>];</span>   <span class=c1>// Path del PTY slave (es: /dev/pts/3)
+</span></span></span><span class=line><span class=cl><span class=p>}</span> <span class=n>PtyHandle</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Configura le dimensioni della finestra terminale.
+</span></span></span><span class=line><span class=cl><span class=c1>// Questo è CRITICO: senza dimensioni corrette, programmi come vim
+</span></span></span><span class=line><span class=cl><span class=c1>// non funzionano.
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>int</span> <span class=nf>pty_set_window_size</span><span class=p>(</span><span class=kt>int</span> <span class=n>fd</span><span class=p>,</span> <span class=kt>int</span> <span class=n>rows</span><span class=p>,</span> <span class=kt>int</span> <span class=n>cols</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>struct</span> <span class=n>winsize</span> <span class=n>ws</span> <span class=o>=</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>ws_row</span> <span class=o>=</span> <span class=n>rows</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>ws_col</span> <span class=o>=</span> <span class=n>cols</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>ws_xpixel</span> <span class=o>=</span> <span class=mi>0</span><span class=p>,</span>  <span class=c1>// Non sempre usati, ma inizializzali
+</span></span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>ws_ypixel</span> <span class=o>=</span> <span class=mi>0</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=nf>ioctl</span><span class=p>(</span><span class=n>fd</span><span class=p>,</span> <span class=n>TIOCSWINSZ</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>ws</span><span class=p>)</span> <span class=o>==</span> <span class=o>-</span><span class=mi>1</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;ioctl TIOCSWINSZ&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Crea un nuovo PTY e forka un processo shell
+</span></span></span><span class=line><span class=cl><span class=n>PtyHandle</span><span class=o>*</span> <span class=nf>pty_create</span><span class=p>(</span><span class=kt>int</span> <span class=n>initial_rows</span><span class=p>,</span> <span class=kt>int</span> <span class=n>initial_cols</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>PtyHandle</span><span class=o>*</span> <span class=n>handle</span> <span class=o>=</span> <span class=nf>malloc</span><span class=p>(</span><span class=k>sizeof</span><span class=p>(</span><span class=n>PtyHandle</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>handle</span><span class=p>)</span> <span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// posix_openpt crea un nuovo PTY master
+</span></span></span><span class=line><span class=cl>    <span class=c1>// O_RDWR: lettura e scrittura
+</span></span></span><span class=line><span class=cl>    <span class=c1>// O_NOCTTY: non rendere questo il terminale di controllo del processo
+</span></span></span><span class=line><span class=cl>    <span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span> <span class=o>=</span> <span class=nf>posix_openpt</span><span class=p>(</span><span class=n>O_RDWR</span> <span class=o>|</span> <span class=n>O_NOCTTY</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span> <span class=o>==</span> <span class=o>-</span><span class=mi>1</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;posix_openpt&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>free</span><span class=p>(</span><span class=n>handle</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// grantpt imposta i permessi corretti sul PTY slave
+</span></span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=nf>grantpt</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>)</span> <span class=o>==</span> <span class=o>-</span><span class=mi>1</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;grantpt&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>close</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>free</span><span class=p>(</span><span class=n>handle</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// unlockpt sblocca il PTY slave per l&#39;uso
+</span></span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=nf>unlockpt</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>)</span> <span class=o>==</span> <span class=o>-</span><span class=mi>1</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;unlockpt&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>close</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>free</span><span class=p>(</span><span class=n>handle</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Ottieni il nome del device PTY slave
+</span></span></span><span class=line><span class=cl>    <span class=kt>char</span><span class=o>*</span> <span class=n>slave_name</span> <span class=o>=</span> <span class=nf>ptsname</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>slave_name</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;ptsname&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>close</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>free</span><span class=p>(</span><span class=n>handle</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=nf>strncpy</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>slave_name</span><span class=p>,</span> <span class=n>slave_name</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>slave_name</span><span class=p>)</span> <span class=o>-</span> <span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=n>handle</span><span class=o>-&gt;</span><span class=n>slave_name</span><span class=p>[</span><span class=k>sizeof</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>slave_name</span><span class=p>)</span> <span class=o>-</span> <span class=mi>1</span><span class=p>]</span> <span class=o>=</span> <span class=sc>&#39;\0&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Imposta le dimensioni PRIMA del fork
+</span></span></span><span class=line><span class=cl>    <span class=nf>pty_set_window_size</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>,</span> <span class=n>initial_rows</span><span class=p>,</span> <span class=n>initial_cols</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Fork: il processo figlio diventerà la shell
+</span></span></span><span class=line><span class=cl>    <span class=n>handle</span><span class=o>-&gt;</span><span class=n>child_pid</span> <span class=o>=</span> <span class=nf>fork</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>child_pid</span> <span class=o>==</span> <span class=o>-</span><span class=mi>1</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>perror</span><span class=p>(</span><span class=s>&#34;fork&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>close</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>free</span><span class=p>(</span><span class=n>handle</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>child_pid</span> <span class=o>==</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// === PROCESSO FIGLIO ===
+</span></span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Chiudi il master fd - il figlio usa solo lo slave
+</span></span></span><span class=line><span class=cl>        <span class=nf>close</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Crea una nuova sessione e diventa il leader.
+</span></span></span><span class=line><span class=cl>        <span class=c1>// Questo è necessario per il controllo del terminale.
+</span></span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=nf>setsid</span><span class=p>()</span> <span class=o>==</span> <span class=o>-</span><span class=mi>1</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nf>_exit</span><span class=p>(</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Apri il PTY slave - questo diventa il nostro terminale
+</span></span></span><span class=line><span class=cl>        <span class=kt>int</span> <span class=n>slave_fd</span> <span class=o>=</span> <span class=nf>open</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>slave_name</span><span class=p>,</span> <span class=n>O_RDWR</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>slave_fd</span> <span class=o>==</span> <span class=o>-</span><span class=mi>1</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nf>_exit</span><span class=p>(</span><span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Configura il PTY slave come stdin, stdout, stderr
+</span></span></span><span class=line><span class=cl>        <span class=nf>dup2</span><span class=p>(</span><span class=n>slave_fd</span><span class=p>,</span> <span class=n>STDIN_FILENO</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>dup2</span><span class=p>(</span><span class=n>slave_fd</span><span class=p>,</span> <span class=n>STDOUT_FILENO</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>dup2</span><span class=p>(</span><span class=n>slave_fd</span><span class=p>,</span> <span class=n>STDERR_FILENO</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=n>slave_fd</span> <span class=o>&gt;</span> <span class=n>STDERR_FILENO</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=nf>close</span><span class=p>(</span><span class=n>slave_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Configura le variabili d&#39;ambiente
+</span></span></span><span class=line><span class=cl>        <span class=nf>setenv</span><span class=p>(</span><span class=s>&#34;TERM&#34;</span><span class=p>,</span> <span class=s>&#34;xterm-256color&#34;</span><span class=p>,</span> <span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>setenv</span><span class=p>(</span><span class=s>&#34;COLORTERM&#34;</span><span class=p>,</span> <span class=s>&#34;truecolor&#34;</span><span class=p>,</span> <span class=mi>1</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Esegui la shell dell&#39;utente
+</span></span></span><span class=line><span class=cl>        <span class=kt>char</span><span class=o>*</span> <span class=n>shell</span> <span class=o>=</span> <span class=nf>getenv</span><span class=p>(</span><span class=s>&#34;SHELL&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>shell</span><span class=p>)</span> <span class=n>shell</span> <span class=o>=</span> <span class=s>&#34;/bin/sh&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// execl sostituisce questo processo con la shell
+</span></span></span><span class=line><span class=cl>        <span class=nf>execl</span><span class=p>(</span><span class=n>shell</span><span class=p>,</span> <span class=n>shell</span><span class=p>,</span> <span class=s>&#34;-i&#34;</span><span class=p>,</span> <span class=nb>NULL</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Se arriviamo qui, execl ha fallito
+</span></span></span><span class=line><span class=cl>        <span class=nf>_exit</span><span class=p>(</span><span class=mi>127</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// === PROCESSO PADRE ===
+</span></span></span><span class=line><span class=cl>    <span class=c1>// Rendi il master fd non-bloccante per il polling
+</span></span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>flags</span> <span class=o>=</span> <span class=nf>fcntl</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>,</span> <span class=n>F_GETFL</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>fcntl</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>,</span> <span class=n>F_SETFL</span><span class=p>,</span> <span class=n>flags</span> <span class=o>|</span> <span class=n>O_NONBLOCK</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>handle</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Invia dati alla shell (tipicamente input da tastiera)
+</span></span></span><span class=line><span class=cl><span class=kt>ssize_t</span> <span class=nf>pty_write</span><span class=p>(</span><span class=n>PtyHandle</span><span class=o>*</span> <span class=n>handle</span><span class=p>,</span> <span class=k>const</span> <span class=kt>char</span><span class=o>*</span> <span class=n>data</span><span class=p>,</span> <span class=kt>size_t</span> <span class=n>len</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nf>write</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>,</span> <span class=n>data</span><span class=p>,</span> <span class=n>len</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Leggi output dalla shell
+</span></span></span><span class=line><span class=cl><span class=kt>ssize_t</span> <span class=nf>pty_read</span><span class=p>(</span><span class=n>PtyHandle</span><span class=o>*</span> <span class=n>handle</span><span class=p>,</span> <span class=kt>char</span><span class=o>*</span> <span class=n>buffer</span><span class=p>,</span> <span class=kt>size_t</span> <span class=n>max_len</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>ssize_t</span> <span class=n>n</span> <span class=o>=</span> <span class=nf>read</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>,</span> <span class=n>buffer</span><span class=p>,</span> <span class=n>max_len</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>n</span> <span class=o>==</span> <span class=o>-</span><span class=mi>1</span> <span class=o>&amp;&amp;</span> <span class=n>errno</span> <span class=o>==</span> <span class=n>EAGAIN</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>  <span class=c1>// Non-blocking, nessun dato disponibile
+</span></span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>n</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Cleanup
+</span></span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>pty_destroy</span><span class=p>(</span><span class=n>PtyHandle</span><span class=o>*</span> <span class=n>handle</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>handle</span><span class=p>)</span> <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Invia SIGHUP alla shell (comportamento standard alla chiusura terminale)
+</span></span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>child_pid</span> <span class=o>&gt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>kill</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>child_pid</span><span class=p>,</span> <span class=n>SIGHUP</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=nf>close</span><span class=p>(</span><span class=n>handle</span><span class=o>-&gt;</span><span class=n>master_fd</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=nf>free</span><span class=p>(</span><span class=n>handle</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ <strong>Attenzione</strong>: il codice nel processo figlio dopo <code>fork()</code> è delicato. Non usare <code>malloc</code>, <code>printf</code> o altre funzioni non async-signal-safe prima di <code>execl</code>. Possono causare deadlock.</p></blockquote><blockquote><p>📝 <strong>Nota</strong>: <code>O_NOCTTY</code> nel <code>posix_openpt</code> è importante. Senza di esso, il PTY potrebbe diventare il terminale di controllo del processo emulatore, causando comportamenti inaspettati con i segnali.</p></blockquote><h3 id=sezione-2-integrazione-con-libghostty-per-il-parsing>Sezione 2: Integrazione con libghostty per il parsing</h3><p>Ora che abbiamo un PTY funzionante, dobbiamo interpretare i byte che arrivano dalla shell. Questo è dove libghostty brilla.</p><blockquote><p>⚠️ <strong>Nota importante</strong>: le API di libghostty mostrate di seguito sono illustrative e basate su pattern comuni nelle librerie di emulazione terminale. Consulta la documentazione ufficiale di libghostty per le firme esatte delle funzioni e le strutture dati.</p></blockquote><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span><span class=lnt>142
+</span><span class=lnt>143
+</span><span class=lnt>144
+</span><span class=lnt>145
+</span><span class=lnt>146
+</span><span class=lnt>147
+</span><span class=lnt>148
+</span><span class=lnt>149
+</span><span class=lnt>150
+</span><span class=lnt>151
+</span><span class=lnt>152
+</span><span class=lnt>153
+</span><span class=lnt>154
+</span><span class=lnt>155
+</span><span class=lnt>156
+</span><span class=lnt>157
+</span><span class=lnt>158
+</span><span class=lnt>159
+</span><span class=lnt>160
+</span><span class=lnt>161
+</span><span class=lnt>162
+</span><span class=lnt>163
+</span><span class=lnt>164
+</span><span class=lnt>165
+</span><span class=lnt>166
+</span><span class=lnt>167
+</span><span class=lnt>168
+</span><span class=lnt>169
+</span><span class=lnt>170
+</span><span class=lnt>171
+</span><span class=lnt>172
+</span><span class=lnt>173
+</span><span class=lnt>174
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=c1>// terminal_state.c - Wrapper per libghostty
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;ghostty.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdlib.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;string.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdio.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Struttura che wrappa lo stato libghostty
+</span></span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>ghostty_terminal_t</span><span class=o>*</span> <span class=n>terminal</span><span class=p>;</span>    <span class=c1>// Handle libghostty
+</span></span></span><span class=line><span class=cl>    <span class=kt>ghostty_surface_t</span><span class=o>*</span> <span class=n>surface</span><span class=p>;</span>      <span class=c1>// Superficie di rendering
+</span></span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>rows</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>cols</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Callback per notificare il layer di rendering
+</span></span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=p>(</span><span class=o>*</span><span class=n>on_damage</span><span class=p>)(</span><span class=kt>int</span> <span class=n>start_row</span><span class=p>,</span> <span class=kt>int</span> <span class=n>end_row</span><span class=p>,</span> <span class=kt>void</span><span class=o>*</span> <span class=n>user_data</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=p>(</span><span class=o>*</span><span class=n>on_bell</span><span class=p>)(</span><span class=kt>void</span><span class=o>*</span> <span class=n>user_data</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span> <span class=p>(</span><span class=o>*</span><span class=n>on_title_change</span><span class=p>)(</span><span class=k>const</span> <span class=kt>char</span><span class=o>*</span> <span class=n>title</span><span class=p>,</span> <span class=kt>void</span><span class=o>*</span> <span class=n>user_data</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span><span class=o>*</span> <span class=n>callback_user_data</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span> <span class=n>TerminalState</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Callback chiamato da libghostty quando una regione dello schermo cambia
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>void</span> <span class=nf>damage_callback</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>    <span class=kt>ghostty_surface_t</span><span class=o>*</span> <span class=n>surface</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>start_row</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>end_row</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span><span class=o>*</span> <span class=n>user_data</span>
+</span></span><span class=line><span class=cl><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=p>(</span><span class=kt>void</span><span class=p>)</span><span class=n>surface</span><span class=p>;</span>  <span class=c1>// Parametro non utilizzato
+</span></span></span><span class=line><span class=cl>    <span class=n>TerminalState</span><span class=o>*</span> <span class=n>state</span> <span class=o>=</span> <span class=p>(</span><span class=n>TerminalState</span><span class=o>*</span><span class=p>)</span><span class=n>user_data</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>on_damage</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>state</span><span class=o>-&gt;</span><span class=nf>on_damage</span><span class=p>(</span><span class=n>start_row</span><span class=p>,</span> <span class=n>end_row</span><span class=p>,</span> <span class=n>state</span><span class=o>-&gt;</span><span class=n>callback_user_data</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Callback per il bell (quando la shell invia \a)
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>void</span> <span class=nf>bell_callback</span><span class=p>(</span><span class=kt>ghostty_surface_t</span><span class=o>*</span> <span class=n>surface</span><span class=p>,</span> <span class=kt>void</span><span class=o>*</span> <span class=n>user_data</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=p>(</span><span class=kt>void</span><span class=p>)</span><span class=n>surface</span><span class=p>;</span>  <span class=c1>// Parametro non utilizzato
+</span></span></span><span class=line><span class=cl>    <span class=n>TerminalState</span><span class=o>*</span> <span class=n>state</span> <span class=o>=</span> <span class=p>(</span><span class=n>TerminalState</span><span class=o>*</span><span class=p>)</span><span class=n>user_data</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>on_bell</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>state</span><span class=o>-&gt;</span><span class=nf>on_bell</span><span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>callback_user_data</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Callback per cambio titolo finestra (escape sequence OSC 0)
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>void</span> <span class=nf>title_callback</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>    <span class=kt>ghostty_surface_t</span><span class=o>*</span> <span class=n>surface</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=k>const</span> <span class=kt>char</span><span class=o>*</span> <span class=n>title</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>void</span><span class=o>*</span> <span class=n>user_data</span>
+</span></span><span class=line><span class=cl><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=p>(</span><span class=kt>void</span><span class=p>)</span><span class=n>surface</span><span class=p>;</span>  <span class=c1>// Parametro non utilizzato
+</span></span></span><span class=line><span class=cl>    <span class=n>TerminalState</span><span class=o>*</span> <span class=n>state</span> <span class=o>=</span> <span class=p>(</span><span class=n>TerminalState</span><span class=o>*</span><span class=p>)</span><span class=n>user_data</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>on_title_change</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>state</span><span class=o>-&gt;</span><span class=nf>on_title_change</span><span class=p>(</span><span class=n>title</span><span class=p>,</span> <span class=n>state</span><span class=o>-&gt;</span><span class=n>callback_user_data</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Inizializza lo stato del terminale
+</span></span></span><span class=line><span class=cl><span class=n>TerminalState</span><span class=o>*</span> <span class=nf>terminal_state_create</span><span class=p>(</span><span class=kt>int</span> <span class=n>rows</span><span class=p>,</span> <span class=kt>int</span> <span class=n>cols</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>TerminalState</span><span class=o>*</span> <span class=n>state</span> <span class=o>=</span> <span class=nf>calloc</span><span class=p>(</span><span class=mi>1</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=n>TerminalState</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>state</span><span class=p>)</span> <span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=n>state</span><span class=o>-&gt;</span><span class=n>rows</span> <span class=o>=</span> <span class=n>rows</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>state</span><span class=o>-&gt;</span><span class=n>cols</span> <span class=o>=</span> <span class=n>cols</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Configura le opzioni del terminale
+</span></span></span><span class=line><span class=cl>    <span class=kt>ghostty_terminal_config_t</span> <span class=n>config</span> <span class=o>=</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>rows</span> <span class=o>=</span> <span class=n>rows</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>cols</span> <span class=o>=</span> <span class=n>cols</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>scrollback_lines</span> <span class=o>=</span> <span class=mi>10000</span><span class=p>,</span>      <span class=c1>// 10k righe di scrollback
+</span></span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>tab_width</span> <span class=o>=</span> <span class=mi>8</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>cursor_style</span> <span class=o>=</span> <span class=n>GHOSTTY_CURSOR_BLOCK</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>cursor_blink</span> <span class=o>=</span> <span class=nb>true</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Crea l&#39;istanza del terminale
+</span></span></span><span class=line><span class=cl>    <span class=n>state</span><span class=o>-&gt;</span><span class=n>terminal</span> <span class=o>=</span> <span class=nf>ghostty_terminal_create</span><span class=p>(</span><span class=o>&amp;</span><span class=n>config</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>terminal</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>free</span><span class=p>(</span><span class=n>state</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Configura i callback
+</span></span></span><span class=line><span class=cl>    <span class=kt>ghostty_surface_callbacks_t</span> <span class=n>callbacks</span> <span class=o>=</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>damage</span> <span class=o>=</span> <span class=n>damage_callback</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>bell</span> <span class=o>=</span> <span class=n>bell_callback</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>title_change</span> <span class=o>=</span> <span class=n>title_callback</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>.</span><span class=n>user_data</span> <span class=o>=</span> <span class=n>state</span>
+</span></span><span class=line><span class=cl>    <span class=p>};</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// Crea la superficie (rappresentazione visuale del terminale)
+</span></span></span><span class=line><span class=cl>    <span class=n>state</span><span class=o>-&gt;</span><span class=n>surface</span> <span class=o>=</span> <span class=nf>ghostty_surface_create</span><span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>terminal</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>callbacks</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>ghostty_terminal_destroy</span><span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>terminal</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=nf>free</span><span class=p>(</span><span class=n>state</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>state</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Processa i byte ricevuti dal PTY.
+</span></span></span><span class=line><span class=cl><span class=c1>// Questa è la funzione chiamata più frequentemente.
+</span></span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>terminal_state_process</span><span class=p>(</span><span class=n>TerminalState</span><span class=o>*</span> <span class=n>state</span><span class=p>,</span> <span class=k>const</span> <span class=kt>char</span><span class=o>*</span> <span class=n>data</span><span class=p>,</span> <span class=kt>size_t</span> <span class=n>len</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>state</span> <span class=o>||</span> <span class=o>!</span><span class=n>data</span> <span class=o>||</span> <span class=n>len</span> <span class=o>==</span> <span class=mi>0</span><span class=p>)</span> <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// libghostty gestisce internamente il parsing delle escape sequence.
+</span></span></span><span class=line><span class=cl>    <span class=c1>// Può ricevere dati parziali: mantiene lo stato tra le chiamate.
+</span></span></span><span class=line><span class=cl>    <span class=nf>ghostty_terminal_feed</span><span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>terminal</span><span class=p>,</span> <span class=p>(</span><span class=k>const</span> <span class=kt>uint8_t</span><span class=o>*</span><span class=p>)</span><span class=n>data</span><span class=p>,</span> <span class=n>len</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Struttura per rappresentare una cella del terminale
+</span></span></span><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=n>codepoint</span><span class=p>;</span>      <span class=c1>// Carattere Unicode
+</span></span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=n>fg_color</span><span class=p>;</span>       <span class=c1>// Colore foreground (RGB)
+</span></span></span><span class=line><span class=cl>    <span class=kt>uint32_t</span> <span class=n>bg_color</span><span class=p>;</span>       <span class=c1>// Colore background (RGB)
+</span></span></span><span class=line><span class=cl>    <span class=kt>uint8_t</span> <span class=n>attributes</span><span class=p>;</span>      <span class=c1>// Bold, italic, underline, etc.
+</span></span></span><span class=line><span class=cl>    <span class=kt>bool</span> <span class=n>wide</span><span class=p>;</span>               <span class=c1>// Carattere wide (CJK)
+</span></span></span><span class=line><span class=cl><span class=p>}</span> <span class=n>TerminalCell</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Ottieni una cella specifica dal grid
+</span></span></span><span class=line><span class=cl><span class=kt>bool</span> <span class=nf>terminal_state_get_cell</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>    <span class=n>TerminalState</span><span class=o>*</span> <span class=n>state</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>row</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=kt>int</span> <span class=n>col</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=n>TerminalCell</span><span class=o>*</span> <span class=n>out_cell</span>
+</span></span><span class=line><span class=cl><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>state</span> <span class=o>||</span> <span class=o>!</span><span class=n>out_cell</span><span class=p>)</span> <span class=k>return</span> <span class=nb>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>row</span> <span class=o>&lt;</span> <span class=mi>0</span> <span class=o>||</span> <span class=n>col</span> <span class=o>&lt;</span> <span class=mi>0</span> <span class=o>||</span> <span class=n>row</span> <span class=o>&gt;=</span> <span class=n>state</span><span class=o>-&gt;</span><span class=n>rows</span> <span class=o>||</span> <span class=n>col</span> <span class=o>&gt;=</span> <span class=n>state</span><span class=o>-&gt;</span><span class=n>cols</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nb>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kt>ghostty_cell_t</span> <span class=n>cell</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=nf>ghostty_surface_get_cell</span><span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>,</span> <span class=n>row</span><span class=p>,</span> <span class=n>col</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>cell</span><span class=p>))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nb>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=n>out_cell</span><span class=o>-&gt;</span><span class=n>codepoint</span> <span class=o>=</span> <span class=n>cell</span><span class=p>.</span><span class=n>codepoint</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>out_cell</span><span class=o>-&gt;</span><span class=n>fg_color</span> <span class=o>=</span> <span class=n>cell</span><span class=p>.</span><span class=n>fg</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>out_cell</span><span class=o>-&gt;</span><span class=n>bg_color</span> <span class=o>=</span> <span class=n>cell</span><span class=p>.</span><span class=n>bg</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>out_cell</span><span class=o>-&gt;</span><span class=n>attributes</span> <span class=o>=</span> <span class=n>cell</span><span class=p>.</span><span class=n>attrs</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>out_cell</span><span class=o>-&gt;</span><span class=n>wide</span> <span class=o>=</span> <span class=n>cell</span><span class=p>.</span><span class=n>wide</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=nb>true</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Ottieni la posizione corrente del cursore
+</span></span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>terminal_state_get_cursor</span><span class=p>(</span><span class=n>TerminalState</span><span class=o>*</span> <span class=n>state</span><span class=p>,</span> <span class=kt>int</span><span class=o>*</span> <span class=n>row</span><span class=p>,</span> <span class=kt>int</span><span class=o>*</span> <span class=n>col</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>state</span> <span class=o>||</span> <span class=o>!</span><span class=n>row</span> <span class=o>||</span> <span class=o>!</span><span class=n>col</span><span class=p>)</span> <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=nf>ghostty_surface_get_cursor</span><span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>,</span> <span class=n>row</span><span class=p>,</span> <span class=n>col</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Resize del terminale (quando la finestra cambia dimensioni)
+</span></span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>terminal_state_resize</span><span class=p>(</span><span class=n>TerminalState</span><span class=o>*</span> <span class=n>state</span><span class=p>,</span> <span class=kt>int</span> <span class=n>new_rows</span><span class=p>,</span> <span class=kt>int</span> <span class=n>new_cols</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>state</span> <span class=o>||</span> <span class=n>new_rows</span> <span class=o>&lt;=</span> <span class=mi>0</span> <span class=o>||</span> <span class=n>new_cols</span> <span class=o>&lt;=</span> <span class=mi>0</span><span class=p>)</span> <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=n>state</span><span class=o>-&gt;</span><span class=n>rows</span> <span class=o>=</span> <span class=n>new_rows</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>state</span><span class=o>-&gt;</span><span class=n>cols</span> <span class=o>=</span> <span class=n>new_cols</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// libghostty gestisce il reflow del contenuto automaticamente
+</span></span></span><span class=line><span class=cl>    <span class=nf>ghostty_terminal_resize</span><span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>terminal</span><span class=p>,</span> <span class=n>new_rows</span><span class=p>,</span> <span class=n>new_cols</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Cleanup
+</span></span></span><span class=line><span class=cl><span class=kt>void</span> <span class=nf>terminal_state_destroy</span><span class=p>(</span><span class=n>TerminalState</span><span class=o>*</span> <span class=n>state</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>state</span><span class=p>)</span> <span class=k>return</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>ghostty_surface_destroy</span><span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>surface</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>terminal</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nf>ghostty_terminal_destroy</span><span class=p>(</span><span class=n>state</span><span class=o>-&gt;</span><span class=n>terminal</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=nf>free</span><span class=p>(</span><span class=n>state</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 <strong>Tip</strong>: <code>ghostty_terminal_feed</code> è progettata per gestire dati parziali. Se una escape sequence è troncata a metà (es: ricevi <code>\x1b[</code> ma non il resto), libghostty mantiene lo stato e completa il parsing alla prossima chiamata.</p></blockquote><h3 id=sezione-3-il-main-loop-e-levent-handling>Sezione 3: Il main loop e l&rsquo;event handling</h3><p>Ora uniamo i pezzi in un loop principale che gestisce input e output:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=c1>// main.c - Loop principale dell&#39;emulatore
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;poll.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdio.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdlib.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdbool.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;signal.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;errno.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;sys/wait.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Include dei nostri moduli
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&#34;pty_manager.h&#34;</span><span class=cp>
+</span></span></span><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&#34;terminal_state.h&#34;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Flag globale per gestire SIGCHLD (morte del processo figlio)
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=k>volatile</span> <span class=kt>sig_atomic_t</span> <span class=n>child_exited</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>void</span> <span class=nf>sigchld_handler</span><span class=p>(</span><span class=kt>int</span> <span class=n>sig</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=p>(</span><span class=kt>void</span><span class=p>)</span><span class=n>sig</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>child_exited</span> <span class=o>=</span> <span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Callback per il damage - qui connetti il tuo renderer
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>void</span> <span class=nf>handle_damage</span><span class=p>(</span><span class=kt>int</span> <span class=n>start_row</span><span class=p>,</span> <span class=kt>int</span> <span class=n>end_row</span><span class=p>,</span> <span class=kt>void</span><span class=o>*</span> <span class=n>user_data</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=p>(</span><span class=kt>void</span><span class=p>)</span><span class=n>user_data</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=c1>// In un&#39;implementazione reale, qui segnali al renderer
+</span></span></span><span class=line><span class=cl>    <span class=c1>// che le righe da start_row a end_row devono essere ridisegnate
+</span></span></span><span class=line><span class=cl>    <span class=nf>printf</span><span class=p>(</span><span class=s>&#34;[DAMAGE] Righe %d-%d modificate</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>,</span> <span class=n>start_row</span><span class=p>,</span> <span class=n>end_row</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Callback per il bell
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>void</span> <span class=nf>handle_bell</span><span class=p>(</span><span class=kt>void</span><span class=o>*</span> <span class=n>user_data</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=p>(</span><span class=kt>void</span><span class=p>)</span><span class=n>user_data</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=nf>printf</span><span class=p>(</span><span class=s>&#34;[BELL] 🔔</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=c1>// In un&#39;implementazione reale: suono, flash visivo, notifica desktop
+</span></span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// Callback per cambio titolo
+</span></span></span><span class=line><span class=cl><span class=k>static</span> <span class=kt>void</span> <span class=nf>handle_title</span><span class=p>(</span><span class=k>const</span> <span class=kt>char</span><span class=o>*</span> <span class=n>title</span>
+</span></span></code></pre></td></tr></table></div></div></article></main><script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js crossorigin=anonymous></script><script>mermaid.init(0[0],"code.language-mermaid")</script></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.158.0
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p><p class="mt-0 text-xs font-mono opacity-50">next gen → 2026-03-26</p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>
