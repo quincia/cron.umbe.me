@@ -1,0 +1,883 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/en/posts/2026-03-26-symfony-mailer-build-professional-transactional-emails/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="Symfony Mailer: Build Professional Transactional Emails"><meta property="og:description" content="Learn to build production-ready transactional emails in Symfony with async queuing, multi-language support, and email client compatibility."><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-26T09:00:00+01:00"><meta property="article:modified_time" content="2026-03-26T09:00:00+01:00"><meta property="article:tag" content="Symfony"><meta property="article:tag" content="Symfony-Mailer"><meta property="article:tag" content="Transactional-Emails"><meta property="article:tag" content="Backend"><meta property="article:tag" content="Intermediate-Tutorial"><meta property="article:tag" content="English"><meta name=twitter:card content="summary"><meta name=twitter:title content="Symfony Mailer: Build Professional Transactional Emails"><meta name=twitter:description content="Learn to build production-ready transactional emails in Symfony with async queuing, multi-language support, and email client compatibility."><script async src="https://www.googletagmanager.com/gtag/js?id=G-T337LHMQNF"></script><script>var doNotTrack=!1,dnt=navigator.doNotTrack||window.doNotTrack||navigator.msDoNotTrack,doNotTrack=dnt=="1"||dnt=="yes";if(!doNotTrack){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date),gtag("config","G-T337LHMQNF")}</script><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - Symfony Mailer: Build Professional Transactional Emails</title><link rel=icon href=/favicon.svg type=image/svg+xml><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><link rel=stylesheet href=/css/custom.css><script defer type=text/javascript src=/minima.b1f51601d2b23d26021d0197fc604b72ad8e88b61007a8812ae9469ee357ab59.js integrity="sha256-sfUWAdKyPSYCHQGX/GBLcq2OiLYQB6iBKulGnuNXq1k="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch{}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/en/>Home</a></li><li class="ml-2 mr-2"><a href=/en/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/en/series>Series</a></li><li class="ml-2 mr-2"><a href=/en/search>🔍</a></li><li class="ml-2 mr-2"><a href=/en/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-4">Symfony Mailer: Build Professional Transactional Emails</h1><div class="mb-6 text-sm font-mono opacity-50"><div class=mb-1><span>2026-03-26</span>
+&#183; <span>10 min read</span>
+&#183; <span>gen:2m 25s</span> &#183; <span>tok:19718</span></div><div><a href=/en/tags/symfony>#symfony</a>
+<a href=/en/tags/symfony-mailer>#symfony-mailer</a>
+<a href=/en/tags/transactional-emails>#transactional-emails</a>
+<a href=/en/tags/backend>#backend</a>
+<a href=/en/tags/intermediate-tutorial>#intermediate-tutorial</a>
+<a href=/en/tags/english>#english</a></div></div><main class=mb-8><p>Learn to build production-ready transactional emails in Symfony with async queuing, multi-language support, and email client compatibility.</p><article class=md><h1 id=symfony-mailer-building-professional-transactional-emails-your-users-will-actually-open>Symfony Mailer: Building Professional Transactional Emails Your Users Will Actually Open</h1><p>Every developer has been there: you ship a feature, users sign up, and then your carefully crafted welcome email lands in spam. Or worse, it renders as a broken mess in Outlook. Transactional emails—password resets, order confirmations, notifications—are the silent workhorses of your application. When they fail, users lose trust.</p><p>The problem isn&rsquo;t just sending emails. It&rsquo;s building a system that&rsquo;s testable locally, maintainable across dozens of email types, renders correctly in every client from Gmail to Outlook 2007, and scales without blocking your HTTP responses. Most tutorials show you how to send a basic email. This article shows you how to build the entire infrastructure.</p><p>We&rsquo;ll construct a modular, production-ready email system in Symfony that separates logic from presentation, supports multiple languages, queues emails asynchronously, and uses reusable components you can maintain without losing your sanity.</p><h2 id=prerequisites>Prerequisites</h2><p>To follow along, you need:</p><ul><li>PHP 8.2 or higher</li><li>Symfony 6.4 or 7.x</li><li>Composer installed</li><li>Docker (for Mailpit local testing)</li><li>Basic familiarity with Symfony services and Twig</li></ul><p>Install the required packages:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>composer require symfony/mailer symfony/twig-bundle symfony/messenger symfony/translation
+</span></span></code></pre></td></tr></table></div></div><h2 id=architecture-and-key-concepts>Architecture and Key Concepts</h2><p>Before writing code, let&rsquo;s understand the architecture we&rsquo;re building. A well-designed transactional email system has clear boundaries between components.</p><pre tabindex=0><code class=language-mermaid data-lang=mermaid>flowchart TD
+    subgraph Application Layer
+        A[Controller/Command] --&gt; B[TransactionalMailer Service]
+    end
+    
+    subgraph Email Domain
+        B --&gt; C{Email Type Factory}
+        C --&gt; D[OrderConfirmationEmail]
+        C --&gt; E[PasswordResetEmail]
+        C --&gt; F[NotificationEmail]
+    end
+    
+    subgraph Template Layer
+        D --&gt; G[Twig Email Builder]
+        E --&gt; G
+        F --&gt; G
+        G --&gt; H[Base Layout]
+        H --&gt; I[Header Component]
+        H --&gt; J[Footer Component]
+        H --&gt; K[CTA Button Component]
+    end
+    
+    subgraph Delivery Layer
+        G --&gt; L[Symfony Messenger Queue]
+        L --&gt; M[Async Handler]
+        M --&gt; N[Mailer Transport]
+        N --&gt; O[(SMTP/Mailgun/SendGrid)]
+    end
+    
+    subgraph Development
+        P[Mailpit] -.-&gt; N
+    end
+</code></pre><p>The key principle: <strong>each email type is a self-contained unit</strong> that knows its data requirements but delegates rendering to templates and delivery to the transport layer. This separation allows you to:</p><ol><li>Test email logic without sending anything</li><li>Preview emails in the browser during development</li><li>Change providers without touching business logic</li><li>Add new email types without modifying existing code</li></ol><h2 id=step-by-step-implementation>Step-by-Step Implementation</h2><h3 id=configuring-transports-for-development-and-production>Configuring Transports for Development and Production</h3><p>Symfony Mailer uses DSN strings to configure transports. The challenge is managing different configurations across environments without duplicating code.</p><p>Start with your environment files:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># .env (defaults for development)</span>
+</span></span><span class=line><span class=cl><span class=nv>MAILER_DSN</span><span class=o>=</span>smtp://mailpit:1025
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># .env.prod (production overrides)</span>
+</span></span><span class=line><span class=cl><span class=nv>MAILER_DSN</span><span class=o>=</span>mailgun+smtp://USERNAME:PASSWORD@default?region<span class=o>=</span>eu
+</span></span></code></pre></td></tr></table></div></div><p>For production, you have several transport options. Here&rsquo;s how to configure the major providers:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># config/packages/mailer.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>framework</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>mailer</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(MAILER_DSN)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>envelope</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>sender</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(MAIL_FROM_ADDRESS)%&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>headers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>From</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;%env(MAIL_FROM_NAME)% &lt;%env(MAIL_FROM_ADDRESS)%&gt;&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>when@dev</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>framework</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>mailer</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;smtp://localhost:1025&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>when@test</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>framework</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>mailer</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>dsn</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;null://null&#39;</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><p>Set up Mailpit for local development. Add this to your <code>docker-compose.yaml</code>:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>services</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>mailpit</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>axllent/mailpit</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>container_name</span><span class=p>:</span><span class=w> </span><span class=l>mailpit</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>restart</span><span class=p>:</span><span class=w> </span><span class=l>unless-stopped</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>ports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=s2>&#34;1025:1025&#34;</span><span class=w>  </span><span class=c># SMTP server</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=s2>&#34;8025:8025&#34;</span><span class=w>  </span><span class=c># Web UI</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>environment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>MP_MAX_MESSAGES</span><span class=p>:</span><span class=w> </span><span class=m>5000</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>MP_SMTP_AUTH_ACCEPT_ANY</span><span class=p>:</span><span class=w> </span><span class=m>1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>MP_SMTP_AUTH_ALLOW_INSECURE</span><span class=p>:</span><span class=w> </span><span class=m>1</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 Mailpit captures all outgoing emails and provides a web interface at <code>http://localhost:8025</code>. You can inspect HTML rendering, headers, and attachments without sending real emails.</p></blockquote><p>For API-based providers, install the corresponding Symfony transport:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># For Mailgun</span>
+</span></span><span class=line><span class=cl>composer require symfony/mailgun-mailer
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># For SendGrid</span>
+</span></span><span class=line><span class=cl>composer require symfony/sendgrid-mailer
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># For Amazon SES</span>
+</span></span><span class=line><span class=cl>composer require symfony/amazon-mailer
+</span></span></code></pre></td></tr></table></div></div><p>Provider DSN formats:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Mailgun</span>
+</span></span><span class=line><span class=cl><span class=nv>MAILER_DSN</span><span class=o>=</span>mailgun+https://KEY:DOMAIN@default?region<span class=o>=</span>eu
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># SendGrid</span>
+</span></span><span class=line><span class=cl><span class=nv>MAILER_DSN</span><span class=o>=</span>sendgrid+api://KEY@default
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Amazon SES</span>
+</span></span><span class=line><span class=cl><span class=nv>MAILER_DSN</span><span class=o>=</span>ses+smtp://ACCESS_KEY:SECRET_KEY@default?region<span class=o>=</span>eu-west-1
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ Never commit API keys to version control. Use environment variables or a secrets management system like Symfony&rsquo;s <code>secrets:set</code>.</p></blockquote><h3 id=building-reusable-twig-templates-with-inline-styles>Building Reusable Twig Templates with Inline Styles</h3><p>Email HTML is notoriously difficult. CSS support varies wildly across clients. Outlook uses Word&rsquo;s rendering engine. Gmail strips <code>&lt;style></code> tags from the <code>&lt;head></code>. The solution: inline styles and bulletproof HTML structures.</p><p>First, create the base layout that all emails will extend:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-twig data-lang=twig><span class=line><span class=cl><span class=c>{# templates/emails/base.html.twig #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>&lt;!DOCTYPE html&gt;
+</span></span></span><span class=line><span class=cl><span class=x>&lt;html lang=&#34;</span><span class=cp>{{</span> <span class=nv>app.request.locale</span><span class=o>|</span><span class=nf>default</span><span class=o>(</span><span class=s1>&#39;en&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>&lt;head&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;meta charset=&#34;UTF-8&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;meta name=&#34;viewport&#34; content=&#34;width=device-width, initial-scale=1.0&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;meta http-equiv=&#34;X-UA-Compatible&#34; content=&#34;IE=edge&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;title&gt;</span><span class=cp>{%</span> <span class=k>block</span> <span class=nv>title</span> <span class=cp>%}{%</span> <span class=k>endblock</span> <span class=cp>%}</span><span class=x>&lt;/title&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;!--[if mso]&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;style type=&#34;text/css&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        body, table, td {font-family: Arial, Helvetica, sans-serif !important;}
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/style&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;![endif]--&gt;
+</span></span></span><span class=line><span class=cl><span class=x>&lt;/head&gt;
+</span></span></span><span class=line><span class=cl><span class=x>&lt;body style=&#34;margin: 0; padding: 0; background-color: #f4f4f4; font-family: -apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, Helvetica, Arial, sans-serif;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    </span><span class=c>{# Wrapper table for full-width background #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;table role=&#34;presentation&#34; cellpadding=&#34;0&#34; cellspacing=&#34;0&#34; width=&#34;100%&#34; style=&#34;background-color: #f4f4f4;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;td align=&#34;center&#34; style=&#34;padding: 40px 20px;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=c>{# Content container - max 600px for email clients #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>                &lt;table role=&#34;presentation&#34; cellpadding=&#34;0&#34; cellspacing=&#34;0&#34; width=&#34;600&#34; style=&#34;max-width: 600px; background-color: #ffffff; border-radius: 8px; overflow: hidden;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                    </span><span class=cp>{%</span> <span class=k>block</span> <span class=nv>header</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>                        </span><span class=cp>{{</span> <span class=nv>include</span><span class=o>(</span><span class=s1>&#39;emails/components/_header.html.twig&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>                    </span><span class=cp>{%</span> <span class=k>endblock</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>                    
+</span></span></span><span class=line><span class=cl><span class=x>                    &lt;tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                        &lt;td style=&#34;padding: 40px 30px;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                            </span><span class=cp>{%</span> <span class=k>block</span> <span class=nv>content</span> <span class=cp>%}{%</span> <span class=k>endblock</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>                        &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                    &lt;/tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                    
+</span></span></span><span class=line><span class=cl><span class=x>                    </span><span class=cp>{%</span> <span class=k>block</span> <span class=nv>footer</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>                        </span><span class=cp>{{</span> <span class=nv>include</span><span class=o>(</span><span class=s1>&#39;emails/components/_footer.html.twig&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>                    </span><span class=cp>{%</span> <span class=k>endblock</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>                &lt;/table&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;/tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/table&gt;
+</span></span></span><span class=line><span class=cl><span class=x>&lt;/body&gt;
+</span></span></span><span class=line><span class=cl><span class=x>&lt;/html&gt;
+</span></span></span></code></pre></td></tr></table></div></div><p>Create the header component:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-twig data-lang=twig><span class=line><span class=cl><span class=c>{# templates/emails/components/_header.html.twig #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>&lt;tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;td style=&#34;background-color: #2563eb; padding: 30px; text-align: center;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{%</span> <span class=k>if</span> <span class=nv>logo_url</span> <span class=k>is</span> <span class=nf>defined</span> <span class=k>and</span> <span class=nv>logo_url</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;img src=&#34;</span><span class=cp>{{</span> <span class=nv>logo_url</span> <span class=cp>}}</span><span class=x>&#34; alt=&#34;</span><span class=cp>{{</span> <span class=nv>app_name</span><span class=o>|</span><span class=nf>default</span><span class=o>(</span><span class=s1>&#39;Company&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>&#34; width=&#34;150&#34; style=&#34;max-width: 150px; height: auto;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{%</span> <span class=k>else</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;h1 style=&#34;margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=cp>{{</span> <span class=nv>app_name</span><span class=o>|</span><span class=nf>default</span><span class=o>(</span><span class=s1>&#39;Company&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/h1&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{%</span> <span class=k>endif</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>&lt;/tr&gt;
+</span></span></span></code></pre></td></tr></table></div></div><p>The footer component with unsubscribe link:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-twig data-lang=twig><span class=line><span class=cl><span class=c>{# templates/emails/components/_footer.html.twig #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>&lt;tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;td style=&#34;background-color: #f8fafc; padding: 30px; text-align: center; border-top: 1px solid #e2e8f0;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;p style=&#34;margin: 0 0 10px 0; color: #64748b; font-size: 14px;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            </span><span class=cp>{{</span> <span class=s1>&#39;email.footer.company_info&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;/p&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;p style=&#34;margin: 0; color: #94a3b8; font-size: 12px;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            </span><span class=cp>{{</span> <span class=s1>&#39;email.footer.address&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;/p&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{%</span> <span class=k>if</span> <span class=nv>unsubscribe_url</span> <span class=k>is</span> <span class=nf>defined</span> <span class=k>and</span> <span class=nv>unsubscribe_url</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;p style=&#34;margin: 20px 0 0 0;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                &lt;a href=&#34;</span><span class=cp>{{</span> <span class=nv>unsubscribe_url</span> <span class=cp>}}</span><span class=x>&#34; style=&#34;color: #94a3b8; font-size: 12px; text-decoration: underline;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                    </span><span class=cp>{{</span> <span class=s1>&#39;email.footer.unsubscribe&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>                &lt;/a&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/p&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{%</span> <span class=k>endif</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>&lt;/tr&gt;
+</span></span></span></code></pre></td></tr></table></div></div><p>Now the CTA button component—this is critical for click-through rates:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-twig data-lang=twig><span class=line><span class=cl><span class=c>{# templates/emails/components/_button.html.twig #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=c>{# 
+</span></span></span><span class=line><span class=cl><span class=c>    Usage: {{ include(&#39;emails/components/_button.html.twig&#39;, {
+</span></span></span><span class=line><span class=cl><span class=c>        url: &#39;https://example.com&#39;,
+</span></span></span><span class=line><span class=cl><span class=c>        text: &#39;Click Here&#39;,
+</span></span></span><span class=line><span class=cl><span class=c>        color: &#39;primary&#39;  {# primary, success, danger #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    }) }}
+</span></span></span><span class=line><span class=cl><span class=x>#}
+</span></span></span><span class=line><span class=cl><span class=cp>{%</span> <span class=k>set</span> <span class=nv>colors</span> <span class=o>=</span> <span class=o>{</span>
+</span></span><span class=line><span class=cl>    <span class=s1>&#39;primary&#39;</span><span class=o>:</span> <span class=o>{</span><span class=s1>&#39;bg&#39;</span><span class=o>:</span> <span class=s1>&#39;#2563eb&#39;</span><span class=o>,</span> <span class=s1>&#39;text&#39;</span><span class=o>:</span> <span class=s1>&#39;#ffffff&#39;</span><span class=o>},</span>
+</span></span><span class=line><span class=cl>    <span class=s1>&#39;success&#39;</span><span class=o>:</span> <span class=o>{</span><span class=s1>&#39;bg&#39;</span><span class=o>:</span> <span class=s1>&#39;#16a34a&#39;</span><span class=o>,</span> <span class=s1>&#39;text&#39;</span><span class=o>:</span> <span class=s1>&#39;#ffffff&#39;</span><span class=o>},</span>
+</span></span><span class=line><span class=cl>    <span class=s1>&#39;danger&#39;</span><span class=o>:</span> <span class=o>{</span><span class=s1>&#39;bg&#39;</span><span class=o>:</span> <span class=s1>&#39;#dc2626&#39;</span><span class=o>,</span> <span class=s1>&#39;text&#39;</span><span class=o>:</span> <span class=s1>&#39;#ffffff&#39;</span><span class=o>}</span>
+</span></span><span class=line><span class=cl><span class=o>}</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=cp>{%</span> <span class=k>set</span> <span class=nv>btn_color</span> <span class=o>=</span> <span class=nv>colors</span><span class=o>[</span><span class=nv>color</span><span class=o>|</span><span class=nf>default</span><span class=o>(</span><span class=s1>&#39;primary&#39;</span><span class=o>)]</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>&lt;table role=&#34;presentation&#34; cellpadding=&#34;0&#34; cellspacing=&#34;0&#34; width=&#34;100%&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;td align=&#34;center&#34; style=&#34;padding: 20px 0;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;!--[if mso]&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;v:roundrect xmlns:v=&#34;urn:schemas-microsoft-com:vml&#34; xmlns:w=&#34;urn:schemas-microsoft-com:office:word&#34; href=&#34;</span><span class=cp>{{</span> <span class=nv>url</span> <span class=cp>}}</span><span class=x>&#34; style=&#34;height:50px;v-text-anchor:middle;width:200px;&#34; arcsize=&#34;10%&#34; stroke=&#34;f&#34; fillcolor=&#34;</span><span class=cp>{{</span> <span class=nv>btn_color.bg</span> <span class=cp>}}</span><span class=x>&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                &lt;w:anchorlock/&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                &lt;center style=&#34;color:</span><span class=cp>{{</span> <span class=nv>btn_color.text</span> <span class=cp>}}</span><span class=x>;font-family:sans-serif;font-size:16px;font-weight:bold;&#34;&gt;</span><span class=cp>{{</span> <span class=nv>text</span> <span class=cp>}}</span><span class=x>&lt;/center&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/v:roundrect&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;![endif]--&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;!--[if !mso]&gt;&lt;!--&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;a href=&#34;</span><span class=cp>{{</span> <span class=nv>url</span> <span class=cp>}}</span><span class=x>&#34; target=&#34;_blank&#34; style=&#34;display: inline-block; background-color: </span><span class=cp>{{</span> <span class=nv>btn_color.bg</span> <span class=cp>}}</span><span class=x>; color: </span><span class=cp>{{</span> <span class=nv>btn_color.text</span> <span class=cp>}}</span><span class=x>; padding: 14px 30px; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 6px; mso-hide: all;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=cp>{{</span> <span class=nv>text</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/a&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;!--&lt;![endif]--&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>&lt;/table&gt;
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>📝 The VML code inside <code>&lt;!--[if mso]></code> is specifically for Outlook on Windows. Without it, buttons appear as plain text links in Outlook.</p></blockquote><p>Now let&rsquo;s create specific email templates. Here&rsquo;s the order confirmation:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-twig data-lang=twig><span class=line><span class=cl><span class=c>{# templates/emails/order_confirmation.html.twig #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=cp>{%</span> <span class=k>extends</span> <span class=s1>&#39;emails/base.html.twig&#39;</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>
+</span></span></span><span class=line><span class=cl><span class=cp>{%</span> <span class=k>block</span> <span class=nv>title</span> <span class=cp>%}{{</span> <span class=s1>&#39;email.order.title&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({</span><span class=s1>&#39;%order_number%&#39;</span><span class=o>:</span> <span class=nv>order.reference</span><span class=o>},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}{%</span> <span class=k>endblock</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>
+</span></span></span><span class=line><span class=cl><span class=cp>{%</span> <span class=k>block</span> <span class=nv>content</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;h1 style=&#34;margin: 0 0 20px 0; color: #1e293b; font-size: 24px; font-weight: 600;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{{</span> <span class=s1>&#39;email.order.heading&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/h1&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;p style=&#34;margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{{</span> <span class=s1>&#39;email.order.greeting&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({</span><span class=s1>&#39;%name%&#39;</span><span class=o>:</span> <span class=nv>customer.firstName</span><span class=o>},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/p&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;p style=&#34;margin: 0 0 30px 0; color: #475569; font-size: 16px; line-height: 1.6;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{{</span> <span class=s1>&#39;email.order.confirmation_text&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({</span><span class=s1>&#39;%order_number%&#39;</span><span class=o>:</span> <span class=nv>order.reference</span><span class=o>},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/p&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    
+</span></span></span><span class=line><span class=cl><span class=x>    </span><span class=c>{# Order items table #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;table role=&#34;presentation&#34; cellpadding=&#34;0&#34; cellspacing=&#34;0&#34; width=&#34;100%&#34; style=&#34;margin-bottom: 30px; border: 1px solid #e2e8f0; border-radius: 6px;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;tr style=&#34;background-color: #f8fafc;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;td style=&#34;padding: 12px 15px; font-weight: 600; color: #1e293b; border-bottom: 1px solid #e2e8f0;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=cp>{{</span> <span class=s1>&#39;email.order.product&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;td style=&#34;padding: 12px 15px; font-weight: 600; color: #1e293b; border-bottom: 1px solid #e2e8f0; text-align: center;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=cp>{{</span> <span class=s1>&#39;email.order.quantity&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;td style=&#34;padding: 12px 15px; font-weight: 600; color: #1e293b; border-bottom: 1px solid #e2e8f0; text-align: right;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=cp>{{</span> <span class=s1>&#39;email.order.price&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;/tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{%</span> <span class=k>for</span> <span class=nv>item</span> <span class=k>in</span> <span class=nv>order.items</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;td style=&#34;padding: 12px 15px; color: #475569; border-bottom: 1px solid #e2e8f0;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=cp>{{</span> <span class=nv>item.productName</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;td style=&#34;padding: 12px 15px; color: #475569; border-bottom: 1px solid #e2e8f0; text-align: center;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=cp>{{</span> <span class=nv>item.quantity</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;td style=&#34;padding: 12px 15px; color: #475569; border-bottom: 1px solid #e2e8f0; text-align: right;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=cp>{{</span> <span class=nv>item.total</span><span class=o>|</span><span class=nf>format_currency</span><span class=o>(</span><span class=nv>order.currency</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;/tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{%</span> <span class=k>endfor</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;tr style=&#34;background-color: #f8fafc;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;td colspan=&#34;2&#34; style=&#34;padding: 12px 15px; font-weight: 600; color: #1e293b; text-align: right;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=cp>{{</span> <span class=s1>&#39;email.order.total&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;td style=&#34;padding: 12px 15px; font-weight: 600; color: #1e293b; text-align: right;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>                </span><span class=cp>{{</span> <span class=nv>order.total</span><span class=o>|</span><span class=nf>format_currency</span><span class=o>(</span><span class=nv>order.currency</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>            &lt;/td&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;/tr&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/table&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    
+</span></span></span><span class=line><span class=cl><span class=x>    </span><span class=cp>{{</span> <span class=nv>include</span><span class=o>(</span><span class=s1>&#39;emails/components/_button.html.twig&#39;</span><span class=o>,</span> <span class=o>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>url</span><span class=o>:</span> <span class=nv>tracking_url</span><span class=o>,</span>
+</span></span><span class=line><span class=cl>        <span class=nv>text</span><span class=o>:</span> <span class=s1>&#39;email.order.track_button&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>),</span>
+</span></span><span class=line><span class=cl>        <span class=nv>color</span><span class=o>:</span> <span class=s1>&#39;primary&#39;</span>
+</span></span><span class=line><span class=cl>    <span class=o>})</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=cp>{%</span> <span class=k>endblock</span> <span class=cp>%}</span><span class=x>
+</span></span></span></code></pre></td></tr></table></div></div><p>And the password reset email:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-twig data-lang=twig><span class=line><span class=cl><span class=c>{# templates/emails/password_reset.html.twig #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=cp>{%</span> <span class=k>extends</span> <span class=s1>&#39;emails/base.html.twig&#39;</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>
+</span></span></span><span class=line><span class=cl><span class=cp>{%</span> <span class=k>block</span> <span class=nv>title</span> <span class=cp>%}{{</span> <span class=s1>&#39;email.password_reset.title&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}{%</span> <span class=k>endblock</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>
+</span></span></span><span class=line><span class=cl><span class=cp>{%</span> <span class=k>block</span> <span class=nv>content</span> <span class=cp>%}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;h1 style=&#34;margin: 0 0 20px 0; color: #1e293b; font-size: 24px; font-weight: 600;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{{</span> <span class=s1>&#39;email.password_reset.heading&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/h1&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;p style=&#34;margin: 0 0 20px 0; color: #475569; font-size: 16px; line-height: 1.6;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{{</span> <span class=s1>&#39;email.password_reset.intro&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/p&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    
+</span></span></span><span class=line><span class=cl><span class=x>    </span><span class=cp>{{</span> <span class=nv>include</span><span class=o>(</span><span class=s1>&#39;emails/components/_button.html.twig&#39;</span><span class=o>,</span> <span class=o>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>url</span><span class=o>:</span> <span class=nv>reset_url</span><span class=o>,</span>
+</span></span><span class=line><span class=cl>        <span class=nv>text</span><span class=o>:</span> <span class=s1>&#39;email.password_reset.button&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>),</span>
+</span></span><span class=line><span class=cl>        <span class=nv>color</span><span class=o>:</span> <span class=s1>&#39;primary&#39;</span>
+</span></span><span class=line><span class=cl>    <span class=o>})</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;p style=&#34;margin: 30px 0 0 0; color: #94a3b8; font-size: 14px; line-height: 1.6;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{{</span> <span class=s1>&#39;email.password_reset.expiry_notice&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({</span><span class=s1>&#39;%minutes%&#39;</span><span class=o>:</span> <span class=nv>expiry_minutes</span><span class=o>},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/p&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;p style=&#34;margin: 20px 0 0 0; color: #94a3b8; font-size: 14px; line-height: 1.6;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{{</span> <span class=s1>&#39;email.password_reset.ignore_notice&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/p&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    
+</span></span></span><span class=line><span class=cl><span class=x>    </span><span class=c>{# Fallback link for clients that don&#39;t render buttons well #}</span><span class=x>
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;p style=&#34;margin: 30px 0 0 0; color: #94a3b8; font-size: 12px; line-height: 1.6;&#34;&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        </span><span class=cp>{{</span> <span class=s1>&#39;email.password_reset.link_fallback&#39;</span><span class=o>|</span><span class=nf>trans</span><span class=o>({},</span> <span class=s1>&#39;emails&#39;</span><span class=o>)</span> <span class=cp>}}</span><span class=x>&lt;br&gt;
+</span></span></span><span class=line><span class=cl><span class=x>        &lt;a href=&#34;</span><span class=cp>{{</span> <span class=nv>reset_url</span> <span class=cp>}}</span><span class=x>&#34; style=&#34;color: #2563eb; word-break: break-all;&#34;&gt;</span><span class=cp>{{</span> <span class=nv>reset_url</span> <span class=cp>}}</span><span class=x>&lt;/a&gt;
+</span></span></span><span class=line><span class=cl><span class=x>    &lt;/p&gt;
+</span></span></span><span class=line><span class=cl><span class=cp>{%</span> <span class=k>endblock</span> <span class=cp>%}</span><span class=x>
+</span></span></span></code></pre></td></tr></table></div></div><h3 id=implementing-the-centralized-email-service>Implementing the Centralized Email Service</h3><p>Now let&rsquo;s build the service layer that orchestrates everything. We&rsquo;ll create a system that supports multiple email types, handles translations, and integrates with Symfony Messenger for async delivery.</p><p>First, define an interface for email messages:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl><span class=c1>// src/Email/TransactionalEmailInterface.php
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\Email</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>interface</span> <span class=nx>TransactionalEmailInterface</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getRecipientEmail</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getRecipientName</span><span class=p>()</span><span class=o>:</span> <span class=o>?</span><span class=nx>string</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getSubjectTranslationKey</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getSubjectTranslationParams</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getTemplate</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getContext</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getLocale</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getPriority</span><span class=p>()</span><span class=o>:</span> <span class=nx>int</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>Create an abstract base class:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl><span class=c1>// src/Email/AbstractTransactionalEmail.php
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\Email</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>abstract</span> <span class=k>class</span> <span class=nc>AbstractTransactionalEmail</span> <span class=k>implements</span> <span class=nx>TransactionalEmailInterface</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>protected</span> <span class=nx>string</span> <span class=nv>$recipientEmail</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>protected</span> <span class=o>?</span><span class=nx>string</span> <span class=nv>$recipientName</span> <span class=o>=</span> <span class=k>null</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>protected</span> <span class=nx>string</span> <span class=nv>$locale</span> <span class=o>=</span> <span class=s1>&#39;en&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=k>protected</span> <span class=nx>int</span> <span class=nv>$priority</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getRecipientEmail</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>recipientEmail</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getRecipientName</span><span class=p>()</span><span class=o>:</span> <span class=o>?</span><span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>recipientName</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getLocale</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>locale</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getPriority</span><span class=p>()</span><span class=o>:</span> <span class=nx>int</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>priority</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getSubjectTranslationParams</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=p>[];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>Implement concrete email types:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl><span class=c1>// src/Email/OrderConfirmationEmail.php
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\Email</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Entity\Order</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Entity\Customer</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>final</span> <span class=k>class</span> <span class=nc>OrderConfirmationEmail</span> <span class=k>extends</span> <span class=nx>AbstractTransactionalEmail</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=fm>__construct</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>Order</span> <span class=nv>$order</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>Customer</span> <span class=nv>$customer</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>string</span> <span class=nv>$trackingUrl</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>recipientEmail</span> <span class=o>=</span> <span class=nv>$customer</span><span class=o>-&gt;</span><span class=na>getEmail</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>recipientName</span> <span class=o>=</span> <span class=nv>$customer</span><span class=o>-&gt;</span><span class=na>getFullName</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>locale</span> <span class=o>=</span> <span class=nv>$customer</span><span class=o>-&gt;</span><span class=na>getPreferredLocale</span><span class=p>()</span> <span class=o>??</span> <span class=s1>&#39;en&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>priority</span> <span class=o>=</span> <span class=mi>10</span><span class=p>;</span> <span class=c1>// High priority for transactional
+</span></span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getSubjectTranslationKey</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=s1>&#39;email.order.subject&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getSubjectTranslationParams</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=p>[</span><span class=s1>&#39;%order_number%&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>order</span><span class=o>-&gt;</span><span class=na>getReference</span><span class=p>()];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getTemplate</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=s1>&#39;emails/order_confirmation.html.twig&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getContext</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;order&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>order</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;customer&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>customer</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;tracking_url&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>trackingUrl</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl><span class=c1>// src/Email/PasswordResetEmail.php
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\Email</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Entity\User</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>final</span> <span class=k>class</span> <span class=nc>PasswordResetEmail</span> <span class=k>extends</span> <span class=nx>AbstractTransactionalEmail</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>private</span> <span class=k>const</span> <span class=no>EXPIRY_MINUTES</span> <span class=o>=</span> <span class=mi>60</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=fm>__construct</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>User</span> <span class=nv>$user</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>string</span> <span class=nv>$resetUrl</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>recipientEmail</span> <span class=o>=</span> <span class=nv>$user</span><span class=o>-&gt;</span><span class=na>getEmail</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>recipientName</span> <span class=o>=</span> <span class=nv>$user</span><span class=o>-&gt;</span><span class=na>getDisplayName</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>locale</span> <span class=o>=</span> <span class=nv>$user</span><span class=o>-&gt;</span><span class=na>getLocale</span><span class=p>()</span> <span class=o>??</span> <span class=s1>&#39;en&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>priority</span> <span class=o>=</span> <span class=mi>20</span><span class=p>;</span> <span class=c1>// Highest priority - time sensitive
+</span></span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getSubjectTranslationKey</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=s1>&#39;email.password_reset.subject&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getTemplate</span><span class=p>()</span><span class=o>:</span> <span class=nx>string</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=s1>&#39;emails/password_reset.html.twig&#39;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>getContext</span><span class=p>()</span><span class=o>:</span> <span class=k>array</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;user&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>user</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;reset_url&#39;</span> <span class=o>=&gt;</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>resetUrl</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;expiry_minutes&#39;</span> <span class=o>=&gt;</span> <span class=nx>self</span><span class=o>::</span><span class=na>EXPIRY_MINUTES</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=p>];</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><p>Now the central mailer service:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-php data-lang=php><span class=line><span class=cl><span class=o>&lt;?</span><span class=nx>php</span>
+</span></span><span class=line><span class=cl><span class=c1>// src/Service/TransactionalMailer.php
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>namespace</span> <span class=nx>App\Service</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Email\TransactionalEmailInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>App\Message\SendEmailMessage</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Psr\Log\LoggerInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Bridge\Twig\Mime\TemplatedEmail</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Mailer\Exception\TransportExceptionInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Mailer\MailerInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Messenger\MessageBusInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Component\Mime\Address</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=k>use</span> <span class=nx>Symfony\Contracts\Translation\TranslatorInterface</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>final</span> <span class=k>class</span> <span class=nc>TransactionalMailer</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=fm>__construct</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>MailerInterface</span> <span class=nv>$mailer</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>MessageBusInterface</span> <span class=nv>$messageBus</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>TranslatorInterface</span> <span class=nv>$translator</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>LoggerInterface</span> <span class=nv>$logger</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>string</span> <span class=nv>$fromEmail</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>string</span> <span class=nv>$fromName</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=k>private</span> <span class=nx>readonly</span> <span class=nx>string</span> <span class=nv>$appName</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=sd>/**
+</span></span></span><span class=line><span class=cl><span class=sd>     * Send email synchronously - use for critical, time-sensitive emails
+</span></span></span><span class=line><span class=cl><span class=sd>     */</span>
+</span></span><span class=line><span class=cl>    <span class=k>public</span> <span class=k>function</span> <span class=nf>sendNow</span><span class=p>(</span><span class=nx>TransactionalEmailInterface</span> <span class=nv>$email</span><span class=p>)</span><span class=o>:</span> <span class=nx>void</span>
+</span></span><span class=line><span class=cl>    <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=nv>$templatedEmail</span> <span class=o>=</span> <span class=nv>$this</span><span class=o>-&gt;</span><span class=na>buildEmail</span><span class=p>(</span><span class=err>$</span>
+</span></span></code></pre></td></tr></table></div></div></article></main><script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js crossorigin=anonymous></script><script>mermaid.init(0[0],"code.language-mermaid")</script></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.159.0
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p><p class="mt-0 text-xs font-mono opacity-50">next gen → 2026-03-30</p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>

@@ -1,0 +1,869 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/posts/2026-03-25-microwarp-proxy-cloudflare-warp-ultra-leggero-da-800kb/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="MicroWARP: Proxy Cloudflare WARP Ultra-Leggero da 800KB"><meta property="og:description" content="Scopri come MicroWARP riduce il footprint di un proxy SOCKS5 a soli 800KB in Docker. Guida completa per deployment in Kubernetes con ottimizzazioni kernel."><meta property="og:locale" content="it"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-25T08:00:00+01:00"><meta property="article:modified_time" content="2026-03-25T08:00:00+01:00"><meta property="article:tag" content="Cloudflare-Warp"><meta property="article:tag" content="Docker"><meta property="article:tag" content="Kubernetes"><meta property="article:tag" content="Devops"><meta property="article:tag" content="Beginner-Tutorial"><meta property="article:tag" content="Italiano"><meta name=twitter:card content="summary"><meta name=twitter:title content="MicroWARP: Proxy Cloudflare WARP Ultra-Leggero da 800KB"><meta name=twitter:description content="Scopri come MicroWARP riduce il footprint di un proxy SOCKS5 a soli 800KB in Docker. Guida completa per deployment in Kubernetes con ottimizzazioni kernel."><script async src="https://www.googletagmanager.com/gtag/js?id=G-T337LHMQNF"></script><script>var doNotTrack=!1,dnt=navigator.doNotTrack||window.doNotTrack||navigator.msDoNotTrack,doNotTrack=dnt=="1"||dnt=="yes";if(!doNotTrack){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date),gtag("config","G-T337LHMQNF")}</script><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - MicroWARP: Proxy Cloudflare WARP Ultra-Leggero da 800KB</title><link rel=icon href=/favicon.svg type=image/svg+xml><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><link rel=stylesheet href=/css/custom.css><script defer type=text/javascript src=/minima.0fd13d0809f6d20301e1285f3f521ceb44e122bca7ab703c4178b5220be4bc9b.js integrity="sha256-D9E9CAn20gMB4ShfP1Ic60ThIrynq3A8QXi1IgvkvJs="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch{}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/>Home</a></li><li class="ml-2 mr-2"><a href=/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/series>Serie</a></li><li class="ml-2 mr-2"><a href=/search>🔍</a></li><li class="ml-2 mr-2"><a href=/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-4">MicroWARP: Proxy Cloudflare WARP Ultra-Leggero da 800KB</h1><div class="mb-6 text-sm font-mono opacity-50"><div class=mb-1><span>2026-03-25</span>
+&#183; <span>10 min read</span>
+&#183; <span>gen:2m 50s</span> &#183; <span>tok:20109</span></div><div><a href=/tags/cloudflare-warp>#cloudflare-warp</a>
+<a href=/tags/docker>#docker</a>
+<a href=/tags/kubernetes>#kubernetes</a>
+<a href=/tags/devops>#devops</a>
+<a href=/tags/beginner-tutorial>#beginner-tutorial</a>
+<a href=/tags/italiano>#italiano</a></div></div><main class=mb-8><p>Scopri come MicroWARP riduce il footprint di un proxy SOCKS5 a soli 800KB in Docker. Guida completa per deployment in Kubernetes con ottimizzazioni kernel.</p><article class=md><h1 id=building-an-ultra-lightweight-cloudflare-warp-proxy-come-microwarp-raggiunge-800kb-di-memory-footprint-in-docker>Building an Ultra-Lightweight Cloudflare WARP Proxy: Come MicroWARP Raggiunge 800KB di Memory Footprint in Docker</h1><p>Ogni container che aggiungi al tuo cluster Kubernetes consuma memoria. Un proxy SOCKS5 tradizionale basato su Dante o Squid parte da 50-100MB. Moltiplica per centinaia di pod e stai bruciando gigabyte di RAM solo per il routing del traffico.</p><p>MicroWARP cambia completamente questa equazione. Con un footprint di soli 800KB, puoi deployare un proxy Cloudflare WARP completo come sidecar senza impatto significativo sulle risorse. Questo articolo ti mostra esattamente come funziona a livello kernel e come implementarlo nei tuoi ambienti.</p><h2 id=prerequisiti>Prerequisiti</h2><p>Prima di procedere, assicurati di avere:</p><ul><li><strong>Docker</strong> 20.10+ installato e funzionante</li><li><strong>Conoscenze base di networking</strong>: comprensione di TCP/IP, proxy SOCKS5, VPN</li><li><strong>Familiarità con Linux</strong>: comandi base, gestione permessi, file system</li><li><strong>Un account Cloudflare</strong> (il tier gratuito è sufficiente)</li><li><strong>kubectl</strong> configurato se intendi deployare su Kubernetes</li><li><strong>(Opzionale)</strong> Accesso a un kernel Linux 5.6+ per le ottimizzazioni WireGuard native</li></ul><blockquote><p>💡 Se non hai mai usato WireGuard, non preoccuparti: MicroWARP astrae completamente la complessità. Tuttavia, capire i concetti di base ti aiuterà a debuggare eventuali problemi.</p></blockquote><h2 id=architettura-e-concetti-chiave>Architettura e Concetti Chiave</h2><h3 id=perché-i-proxy-tradizionali-consumano-tanta-memoria>Perché i Proxy Tradizionali Consumano Tanta Memoria</h3><p>Un proxy SOCKS5 classico opera interamente in user-space. Questo significa che ogni pacchetto di rete attraversa molteplici context switch tra kernel e applicazione:</p><ol><li>Il pacchetto arriva alla NIC</li><li>Il kernel lo copia in un buffer</li><li>L&rsquo;applicazione proxy lo legge dal buffer (context switch)</li><li>L&rsquo;applicazione elabora e decide il routing</li><li>L&rsquo;applicazione scrive sul socket di destinazione (context switch)</li><li>Il kernel invia il pacchetto</li></ol><p>Ogni context switch costa circa 1-2 microsecondi e richiede allocazioni di memoria per i buffer. Con migliaia di connessioni simultanee, questi costi si accumulano rapidamente.</p><h3 id=lapproccio-kernel-space-di-microwarp>L&rsquo;Approccio Kernel-Space di MicroWARP</h3><p>MicroWARP sfrutta WireGuard, che dal kernel Linux 5.6 è implementato direttamente nel kernel. Questo elimina la maggior parte dei context switch:</p><pre tabindex=0><code>┌─────────────────────────────────────────────────────────────────────────────┐
+│                    APPROCCIO TRADIZIONALE (User-Space)                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Pacchetto ──► Kernel ──► Context ──► Proxy ──► Elaborazione ──► Context   │
+│  in arrivo     Buffer     Switch     User-     + Buffer         Switch     │
+│                                      Space                                  │
+│                                                        │                    │
+│                                                        ▼                    │
+│                                              Kernel Socket ──► Pacchetto   │
+│                                                                 in uscita  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       MICROWARP (Kernel-Space)                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Pacchetto ──► WireGuard ──► Routing Decision ──► Pacchetto in uscita      │
+│  in arrivo     Kernel        in-kernel                                      │
+│                Module                                                       │
+│                   ▲                                                         │
+│                   │                                                         │
+│         ┌────────────────────┐                                              │
+│         │ Componente User-   │                                              │
+│         │ Space Minimale     │                                              │
+│         │ (solo handshake)   │                                              │
+│         └────────────────────┘                                              │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+</code></pre><p>Il componente user-space di MicroWARP gestisce esclusivamente:</p><ul><li>Handshake SOCKS5 iniziale (pochi byte)</li><li>Configurazione del tunnel WireGuard</li><li>Health check</li></ul><p>Tutto il traffico dati effettivo passa direttamente attraverso il kernel, senza mai toccare l&rsquo;applicazione.</p><h3 id=struttura-interna-di-microwarp>Struttura Interna di MicroWARP</h3><pre tabindex=0><code>┌──────────────────┐
+│ Client           │
+│ Application      │
+│                  │
+│ [SOCKS5 Request] │
+└────────┬─────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│           MicroWARP Container (~800KB)              │
+├─────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │
+│  │ SOCKS5      │  │ WireGuard   │  │ Cloudflare  │  │
+│  │ Listener    │  │ Config      │  │ Auth        │  │
+│  │ ~200KB      │  │ ~100KB      │  │ ~300KB      │  │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  │
+│         │                │                │         │
+│         └────────────────┼────────────────┘         │
+│                          │                          │
+│              ┌───────────┴──────────���┐              │
+│              │ Shared Buffers ~200KB │              │
+│              └───────────┬───────────┘              │
+└──────────────────────────┼──────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────┐
+│                   Linux Kernel                      │
+├─────────────────────────────────────────────────────┤
+│  ┌─────────────────┐    ┌─────────────────┐         │
+│  │ WireGuard       │───►│ Network Stack   │         │
+│  │ Module          │    │                 │         │
+│  └─────────────────┘    └────────┬────────┘         │
+└──────────────────────────────────┼──────────────────┘
+                                   │
+                                   ▼
+                    ┌─────────────────────────┐
+                    │    Cloudflare Edge      │
+                    │    [WARP Endpoint]      │
+                    └─────────────────────────┘
+</code></pre><h2 id=implementazione-passo-passo>Implementazione Passo-Passo</h2><h3 id=sezione-1-setup-base-con-docker>Sezione 1: Setup Base con Docker</h3><p>Iniziamo con il deployment più semplice possibile. Crea una directory di progetto e il file di configurazione:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Crea la struttura del progetto</span>
+</span></span><span class=line><span class=cl>mkdir -p microwarp-proxy/<span class=o>{</span>config,data<span class=o>}</span>
+</span></span><span class=line><span class=cl><span class=nb>cd</span> microwarp-proxy
+</span></span></code></pre></td></tr></table></div></div><p>Crea il file <code>docker-compose.yml</code>:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># docker-compose.yml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># Configurazione minimale per MicroWARP</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>services</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>microwarp</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io/microwarp/microwarp:latest</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>container_name</span><span class=p>:</span><span class=w> </span><span class=l>microwarp-proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Capability necessaria per creare l&#39;interfaccia WireGuard</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>cap_add</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>NET_ADMIN</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Sysctls per il forwarding del traffico</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>sysctls</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>net.ipv4.ip_forward=1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>net.ipv4.conf.all.src_valid_mark=1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Volume per persistere la registrazione WARP</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>./data:/var/lib/microwarp</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Esponi la porta SOCKS5 solo su localhost</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>ports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=s2>&#34;127.0.0.1:1080:1080&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Limiti di risorse ultra-bassi</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>deploy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>limits</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=l>2M </span><span class=w> </span><span class=c># Margine di sicurezza sopra gli 800KB</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>cpus</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;0.1&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>reservations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=l>1M</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Health check integrato</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>healthcheck</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>test</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&#34;CMD&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;microwarp&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;health&#34;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>interval</span><span class=p>:</span><span class=w> </span><span class=l>30s</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>timeout</span><span class=p>:</span><span class=w> </span><span class=l>5s</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>retries</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Restart policy per produzione</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>restart</span><span class=p>:</span><span class=w> </span><span class=l>unless-stopped</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>environment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Livello di log (debug|info|warn|error)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>MICROWARP_LOG_LEVEL=info</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Indirizzo di ascolto SOCKS5</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>MICROWARP_LISTEN=0.0.0.0:1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Abilita metriche Prometheus (opzionale)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>MICROWARP_METRICS=false</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><p>Avvia il container:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Avvia MicroWARP in background</span>
+</span></span><span class=line><span class=cl>docker compose up -d
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Verifica che sia partito correttamente</span>
+</span></span><span class=line><span class=cl>docker compose logs -f microwarp
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ <strong>Nota importante</strong>: La prima esecuzione richiede la registrazione con Cloudflare WARP. Il container mostrerà un URL da visitare per completare l&rsquo;autenticazione. Questo passaggio è necessario solo una volta.</p></blockquote><p>Testa la connessione:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Verifica che il proxy risponda</span>
+</span></span><span class=line><span class=cl>curl --socks5 127.0.0.1:1080 https://cloudflare.com/cdn-cgi/trace
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Dovresti vedere warp=on nell&#39;output</span>
+</span></span></code></pre></td></tr></table></div></div><h3 id=sezione-2-configurazione-multi-container-e-network-isolation>Sezione 2: Configurazione Multi-Container e Network Isolation</h3><p>In scenari reali, vorrai che altri container usino MicroWARP come proxy. Ecco una configurazione più avanzata:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span><span class=lnt>62
+</span><span class=lnt>63
+</span><span class=lnt>64
+</span><span class=lnt>65
+</span><span class=lnt>66
+</span><span class=lnt>67
+</span><span class=lnt>68
+</span><span class=lnt>69
+</span><span class=lnt>70
+</span><span class=lnt>71
+</span><span class=lnt>72
+</span><span class=lnt>73
+</span><span class=lnt>74
+</span><span class=lnt>75
+</span><span class=lnt>76
+</span><span class=lnt>77
+</span><span class=lnt>78
+</span><span class=lnt>79
+</span><span class=lnt>80
+</span><span class=lnt>81
+</span><span class=lnt>82
+</span><span class=lnt>83
+</span><span class=lnt>84
+</span><span class=lnt>85
+</span><span class=lnt>86
+</span><span class=lnt>87
+</span><span class=lnt>88
+</span><span class=lnt>89
+</span><span class=lnt>90
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># docker-compose.multi.yml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># Setup multi-container con network isolation</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>networks</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Network privata per il traffico proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>proxy-net</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>driver</span><span class=p>:</span><span class=w> </span><span class=l>bridge</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>ipam</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>config</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>subnet</span><span class=p>:</span><span class=w> </span><span class=m>172.28.0.0</span><span class=l>/16</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Network per servizi che NON devono usare il proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>internal-net</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>driver</span><span class=p>:</span><span class=w> </span><span class=l>bridge</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>internal</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>  </span><span class=c># Nessun accesso esterno</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>services</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>microwarp</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io/microwarp/microwarp:latest</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>container_name</span><span class=p>:</span><span class=w> </span><span class=l>microwarp</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>cap_add</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>NET_ADMIN</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>sysctls</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>net.ipv4.ip_forward=1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>net.ipv4.conf.all.src_valid_mark=1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>microwarp-data:/var/lib/microwarp</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>networks</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>proxy-net</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># IP fisso per riferimento facile da altri container</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>ipv4_address</span><span class=p>:</span><span class=w> </span><span class=m>172.28.0.10</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>deploy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>limits</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=l>2M</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>cpus</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;0.1&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>healthcheck</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>test</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&#34;CMD&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;microwarp&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;health&#34;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>interval</span><span class=p>:</span><span class=w> </span><span class=l>30s</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>timeout</span><span class=p>:</span><span class=w> </span><span class=l>5s</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>retries</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>restart</span><span class=p>:</span><span class=w> </span><span class=l>unless-stopped</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>environment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>MICROWARP_LOG_LEVEL=info</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>MICROWARP_LISTEN=0.0.0.0:1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Esempio: applicazione che usa il proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>web-scraper</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>python:3.11-slim</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>depends_on</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>microwarp</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>service_healthy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>networks</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>proxy-net</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>environment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Configura il proxy per tutte le richieste HTTP/HTTPS</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>HTTP_PROXY=socks5://172.28.0.10:1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>HTTPS_PROXY=socks5://172.28.0.10:1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Escludi traffico interno dal proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>NO_PROXY=localhost,127.0.0.1,172.28.0.0/16</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>command</span><span class=p>:</span><span class=w> </span><span class=p>&gt;</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>      python -c &#34;
+</span></span></span><span class=line><span class=cl><span class=sd>      import requests
+</span></span></span><span class=line><span class=cl><span class=sd>      r = requests.get(&#39;https://cloudflare.com/cdn-cgi/trace&#39;)
+</span></span></span><span class=line><span class=cl><span class=sd>      print(r.text)
+</span></span></span><span class=line><span class=cl><span class=sd>      &#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Esempio: database che NON deve usare il proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>postgres</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>postgres:15-alpine</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>networks</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>internal-net</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>environment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>POSTGRES_PASSWORD=secret</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>postgres-data:/var/lib/postgresql/data</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Servizio che accede sia al proxy che al database</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>api-server</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>node:20-alpine</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>networks</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>proxy-net     </span><span class=w> </span><span class=c># Per traffico esterno via WARP</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>internal-net  </span><span class=w> </span><span class=c># Per accesso al database</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>environment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>SOCKS_PROXY=socks5://172.28.0.10:1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>DATABASE_URL=postgres://postgres:secret@postgres:5432/app</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>microwarp-data</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>postgres-data</span><span class=p>:</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 L&rsquo;uso di network separate ti permette di controllare esattamente quale traffico passa attraverso il proxy. Il database rimane isolato e inaccessibile dall&rsquo;esterno, mentre il traffico dell&rsquo;API verso servizi esterni usa WARP.</p></blockquote><h3 id=sezione-3-deployment-come-kubernetes-sidecar>Sezione 3: Deployment come Kubernetes Sidecar</h3><p>Il pattern sidecar è ideale per MicroWARP: ogni pod ha il suo proxy dedicato con footprint minimo.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># microwarp-sidecar-deployment.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># Deployment Kubernetes con MicroWARP come sidecar</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>apps/v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Deployment</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>app-with-warp-proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>app</span><span class=p>:</span><span class=w> </span><span class=l>my-application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>replicas</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>selector</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>matchLabels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>app</span><span class=p>:</span><span class=w> </span><span class=l>my-application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>template</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>app</span><span class=p>:</span><span class=w> </span><span class=l>my-application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Annotazione per escludere il sidecar da service mesh (se presente)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>sidecar.istio.io/inject</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;false&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Init container per verificare che WARP sia registrato</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>initContainers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>warp-init</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io/microwarp/microwarp:latest</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>command</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&#34;microwarp&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;init&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;--check-registration&#34;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>volumeMounts</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>warp-data</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>mountPath</span><span class=p>:</span><span class=w> </span><span class=l>/var/lib/microwarp</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>securityContext</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>capabilities</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>add</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&#34;NET_ADMIN&#34;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Container principale dell&#39;applicazione</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>app</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>my-app:latest</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>ports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>containerPort</span><span class=p>:</span><span class=w> </span><span class=m>8080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Il proxy è raggiungibile su localhost grazie al pod network</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>HTTP_PROXY</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;socks5://127.0.0.1:1080&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>HTTPS_PROXY</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;socks5://127.0.0.1:1080&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>NO_PROXY</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;localhost,127.0.0.1,.cluster.local,.svc&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>requests</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;128Mi&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>cpu</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;100m&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>limits</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;256Mi&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>cpu</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;500m&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Sidecar MicroWARP</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>microwarp</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io/microwarp/microwarp:latest</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>securityContext</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>capabilities</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>add</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&#34;NET_ADMIN&#34;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>MICROWARP_LISTEN</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;127.0.0.1:1080&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>MICROWARP_LOG_LEVEL</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;warn&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Disabilita metriche per ridurre ulteriormente il footprint</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>MICROWARP_METRICS</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;false&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>volumeMounts</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>warp-data</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>mountPath</span><span class=p>:</span><span class=w> </span><span class=l>/var/lib/microwarp</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=c># Risorse ultra-limitate</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>requests</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;1Mi&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>cpu</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;10m&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>limits</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;2Mi&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>cpu</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;50m&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=c># Probe per health check</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>livenessProbe</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>exec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>command</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&#34;microwarp&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;health&#34;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>initialDelaySeconds</span><span class=p>:</span><span class=w> </span><span class=m>10</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>periodSeconds</span><span class=p>:</span><span class=w> </span><span class=m>30</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>readinessProbe</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>exec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>command</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&#34;microwarp&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;health&#34;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>initialDelaySeconds</span><span class=p>:</span><span class=w> </span><span class=m>5</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>periodSeconds</span><span class=p>:</span><span class=w> </span><span class=m>10</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>warp-data</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>persistentVolumeClaim</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>claimName</span><span class=p>:</span><span class=w> </span><span class=l>warp-registration-pvc</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nn>---</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># PVC per persistere la registrazione WARP tra i restart</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>PersistentVolumeClaim</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>warp-registration-pvc</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>accessModes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=l>ReadWriteMany </span><span class=w> </span><span class=c># Necessario se replicas &gt; 1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>requests</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>storage</span><span class=p>:</span><span class=w> </span><span class=l>1Mi </span><span class=w> </span><span class=c># La registrazione occupa pochi KB</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>storageClassName</span><span class=p>:</span><span class=w> </span><span class=l>fast-ssd</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><p>Per deployare:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Applica la configurazione</span>
+</span></span><span class=line><span class=cl>kubectl apply -f microwarp-sidecar-deployment.yaml
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Verifica che i pod siano running</span>
+</span></span><span class=line><span class=cl>kubectl get pods -l <span class=nv>app</span><span class=o>=</span>my-application
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Controlla i log del sidecar</span>
+</span></span><span class=line><span class=cl>kubectl logs -l <span class=nv>app</span><span class=o>=</span>my-application -c microwarp
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>📝 Con 3 repliche, stai usando solo 6MB di memoria totale per i proxy (2MB × 3). Un setup equivalente con Dante richiederebbe circa 150-300MB.</p></blockquote><h2 id=configurazione-per-produzione>Configurazione per Produzione</h2><h3 id=gestione-sicura-delle-credenziali>Gestione Sicura delle Credenziali</h3><p>In produzione, le credenziali WARP non devono essere accessibili a chiunque abbia accesso ai container. Usa Kubernetes Secrets:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span><span class=lnt>9
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># warp-secrets.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Secret</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>warp-credentials</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>Opaque</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>data</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Genera con: cat /var/lib/microwarp/reg.json | base64</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>registration</span><span class=p>:</span><span class=w> </span><span class=l>&lt;BASE64_ENCODED_REGISTRATION&gt;</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><p>Modifica il deployment per usare il secret:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># Nel container microwarp, aggiungi:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>volumeMounts</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>warp-creds</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>mountPath</span><span class=p>:</span><span class=w> </span><span class=l>/var/lib/microwarp</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>readOnly</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># E nella sezione volumes:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>warp-creds</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>secret</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>secretName</span><span class=p>:</span><span class=w> </span><span class=l>warp-credentials</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><h3 id=configurazione-avanzata-con-configmap>Configurazione Avanzata con ConfigMap</h3><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># microwarp-config.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>ConfigMap</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>microwarp-config</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>data</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>config.toml</span><span class=p>:</span><span class=w> </span><span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>    # Configurazione MicroWARP per produzione
+</span></span></span><span class=line><span class=cl><span class=sd>    
+</span></span></span><span class=line><span class=cl><span class=sd>    [server]
+</span></span></span><span class=line><span class=cl><span class=sd>    # Indirizzo di ascolto
+</span></span></span><span class=line><span class=cl><span class=sd>    listen = &#34;127.0.0.1:1080&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>    # Timeout connessione in secondi
+</span></span></span><span class=line><span class=cl><span class=sd>    connect_timeout = 10
+</span></span></span><span class=line><span class=cl><span class=sd>    # Timeout idle in secondi (0 = nessun timeout)
+</span></span></span><span class=line><span class=cl><span class=sd>    idle_timeout = 300
+</span></span></span><span class=line><span class=cl><span class=sd>    
+</span></span></span><span class=line><span class=cl><span class=sd>    [wireguard]
+</span></span></span><span class=line><span class=cl><span class=sd>    # MTU ottimizzato per container networking
+</span></span></span><span class=line><span class=cl><span class=sd>    mtu = 1280
+</span></span></span><span class=line><span class=cl><span class=sd>    # Keepalive per NAT traversal (secondi)
+</span></span></span><span class=line><span class=cl><span class=sd>    persistent_keepalive = 25
+</span></span></span><span class=line><span class=cl><span class=sd>    
+</span></span></span><span class=line><span class=cl><span class=sd>    [performance]
+</span></span></span><span class=line><span class=cl><span class=sd>    # Numero massimo di connessioni simultanee
+</span></span></span><span class=line><span class=cl><span class=sd>    max_connections = 1000
+</span></span></span><span class=line><span class=cl><span class=sd>    # Dimensione buffer condiviso (bytes)
+</span></span></span><span class=line><span class=cl><span class=sd>    buffer_size = 65536
+</span></span></span><span class=line><span class=cl><span class=sd>    # Usa io_uring se disponibile (kernel 5.1+)
+</span></span></span><span class=line><span class=cl><span class=sd>    use_io_uring = true
+</span></span></span><span class=line><span class=cl><span class=sd>    
+</span></span></span><span class=line><span class=cl><span class=sd>    [logging]
+</span></span></span><span class=line><span class=cl><span class=sd>    # Livello: trace, debug, info, warn, error
+</span></span></span><span class=line><span class=cl><span class=sd>    level = &#34;warn&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>    # Formato: json, text
+</span></span></span><span class=line><span class=cl><span class=sd>    format = &#34;json&#34;
+</span></span></span><span class=line><span class=cl><span class=sd>    
+</span></span></span><span class=line><span class=cl><span class=sd>    [metrics]
+</span></span></span><span class=line><span class=cl><span class=sd>    # Abilita endpoint Prometheus
+</span></span></span><span class=line><span class=cl><span class=sd>    enabled = true
+</span></span></span><span class=line><span class=cl><span class=sd>    # Porta per le metriche (separata dal proxy)
+</span></span></span><span class=line><span class=cl><span class=sd>    port = 9090</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><h3 id=network-policies-per-kubernetes>Network Policies per Kubernetes</h3><p>Limita il traffico in ingresso e uscita del sidecar:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># network-policy.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>networking.k8s.io/v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>NetworkPolicy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>microwarp-policy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>podSelector</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>matchLabels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>app</span><span class=p>:</span><span class=w> </span><span class=l>my-application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>policyTypes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=l>Ingress</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=l>Egress</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>ingress</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Solo traffico dal pod stesso (localhost)</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>from</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>podSelector</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>matchLabels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>app</span><span class=p>:</span><span class=w> </span><span class=l>my-application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>ports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>port</span><span class=p>:</span><span class=w> </span><span class=m>1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>protocol</span><span class=p>:</span><span class=w> </span><span class=l>TCP</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>egress</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Permetti traffico verso Cloudflare WARP endpoints</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>to</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>ipBlock</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>cidr</span><span class=p>:</span><span class=w> </span><span class=m>162.159.192.0</span><span class=l>/24 </span><span class=w> </span><span class=c># Cloudflare WARP</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>ipBlock</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>cidr</span><span class=p>:</span><span class=w> </span><span class=m>162.159.193.0</span><span class=l>/24</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>ports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>port</span><span class=p>:</span><span class=w> </span><span class=m>2408</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>protocol</span><span class=p>:</span><span class=w> </span><span class=l>UDP</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Permetti DNS</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span>- <span class=nt>to</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>namespaceSelector</span><span class=p>:</span><span class=w> </span>{}<span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>podSelector</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>matchLabels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>k8s-app</span><span class=p>:</span><span class=w> </span><span class=l>kube-dns</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>ports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>port</span><span class=p>:</span><span class=w> </span><span class=m>53</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>protocol</span><span class=p>:</span><span class=w> </span><span class=l>UDP</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><h2 id=errori-comuni-e-troubleshooting>Errori Comuni e Troubleshooting</h2><h3 id=errore-tunsetiff-operation-not-permitted>Errore: &ldquo;TUNSETIFF: Operation not permitted&rdquo;</h3><pre tabindex=0><code>Error: failed to create WireGuard interface: TUNSETIFF: Operation not permitted
+</code></pre><p><strong>Causa</strong>: Il container non ha la capability NET_ADMIN.</p><p><strong>Soluzione</strong>:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># Docker Compose</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>cap_add</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=l>NET_ADMIN</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># Kubernetes</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>securityContext</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>capabilities</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>add</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&#34;NET_ADMIN&#34;</span><span class=p>]</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ Se usi un runtime container con restrizioni di sicurezza (gVisor, Kata), potresti dover usare la modalità user-space di WireGuard, che aumenta il footprint a circa 5MB.</p></blockquote><h3 id=errore-registration-expired>Errore: &ldquo;Registration expired&rdquo;</h3><pre tabindex=0><code>Error: WARP registration expired, please re-authenticate
+</code></pre><p><strong>Causa</strong>: La registrazione WARP ha una scadenza (tipicamente 30 giorni senza uso).</p><p><strong>Soluzione</strong>:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Rimuovi la vecchia registrazione</span>
+</span></span><span class=line><span class=cl>docker <span class=nb>exec</span> microwarp rm -f /var/lib/microwarp/reg.json
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Riavvia il container per ri-registrarsi</span>
+</span></span><span class=line><span class=cl>docker restart microwarp
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Segui il link di autenticazione nei log</span>
+</span></span><span class=line><span class=cl>docker logs microwarp
+</span></span></code></pre></td></tr></table></div></div><h3 id=errore-too-many-open-files>Errore: &ldquo;Too many open files&rdquo;</h3><pre tabindex=0><code>Error: accept: too many open files
+</code></pre><p>Questo errore si verifica con molte connessioni simultanee.</p><p><strong>Soluzione</strong>: Aumenta i limiti di file descriptor:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># docker-compose.yml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>services</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>microwarp</span><span class=p>:</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div></article></main><script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js crossorigin=anonymous></script><script>mermaid.init(0[0],"code.language-mermaid")</script></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.159.0
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p><p class="mt-0 text-xs font-mono opacity-50">next gen → 2026-03-30</p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>

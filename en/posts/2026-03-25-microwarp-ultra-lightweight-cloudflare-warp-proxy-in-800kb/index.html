@@ -1,0 +1,767 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/en/posts/2026-03-25-microwarp-ultra-lightweight-cloudflare-warp-proxy-in-800kb/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="MicroWARP: Ultra-Lightweight Cloudflare WARP Proxy in 800KB"><meta property="og:description" content="Learn how MicroWARP achieves 100x memory reduction for Cloudflare WARP, running SOCKS5 proxy in under 1MB. Perfect for edge deployments and Kubernetes."><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-25T09:00:00+01:00"><meta property="article:modified_time" content="2026-03-25T09:00:00+01:00"><meta property="article:tag" content="Docker"><meta property="article:tag" content="Cloudflare-Warp"><meta property="article:tag" content="Devops"><meta property="article:tag" content="Kubernetes"><meta property="article:tag" content="Wireguard"><meta property="article:tag" content="English"><meta name=twitter:card content="summary"><meta name=twitter:title content="MicroWARP: Ultra-Lightweight Cloudflare WARP Proxy in 800KB"><meta name=twitter:description content="Learn how MicroWARP achieves 100x memory reduction for Cloudflare WARP, running SOCKS5 proxy in under 1MB. Perfect for edge deployments and Kubernetes."><script async src="https://www.googletagmanager.com/gtag/js?id=G-T337LHMQNF"></script><script>var doNotTrack=!1,dnt=navigator.doNotTrack||window.doNotTrack||navigator.msDoNotTrack,doNotTrack=dnt=="1"||dnt=="yes";if(!doNotTrack){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date),gtag("config","G-T337LHMQNF")}</script><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - MicroWARP: Ultra-Lightweight Cloudflare WARP Proxy in 800KB</title><link rel=icon href=/favicon.svg type=image/svg+xml><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><link rel=stylesheet href=/css/custom.css><script defer type=text/javascript src=/minima.b1f51601d2b23d26021d0197fc604b72ad8e88b61007a8812ae9469ee357ab59.js integrity="sha256-sfUWAdKyPSYCHQGX/GBLcq2OiLYQB6iBKulGnuNXq1k="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch{}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/en/>Home</a></li><li class="ml-2 mr-2"><a href=/en/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/en/series>Series</a></li><li class="ml-2 mr-2"><a href=/en/search>🔍</a></li><li class="ml-2 mr-2"><a href=/en/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-4">MicroWARP: Ultra-Lightweight Cloudflare WARP Proxy in 800KB</h1><div class="mb-6 text-sm font-mono opacity-50"><div class=mb-1><span>2026-03-25</span>
+&#183; <span>11 min read</span>
+&#183; <span>gen:2m 46s</span> &#183; <span>tok:19758</span></div><div><a href=/en/tags/docker>#docker</a>
+<a href=/en/tags/cloudflare-warp>#cloudflare-warp</a>
+<a href=/en/tags/devops>#devops</a>
+<a href=/en/tags/kubernetes>#kubernetes</a>
+<a href=/en/tags/wireguard>#wireguard</a>
+<a href=/en/tags/english>#english</a></div></div><main class=mb-8><p>Learn how MicroWARP achieves 100x memory reduction for Cloudflare WARP, running SOCKS5 proxy in under 1MB. Perfect for edge deployments and Kubernetes.</p><article class=md><h1 id=building-an-ultra-lightweight-cloudflare-warp-proxy-how-microwarp-achieves-800kb-memory-footprint-in-docker>Building an Ultra-Lightweight Cloudflare WARP Proxy: How MicroWARP Achieves 800KB Memory Footprint in Docker</h1><p>Every byte matters when you&rsquo;re running containers at scale. Traditional Cloudflare WARP clients consume 80-150MB of RAM—acceptable for desktop applications, but catastrophic for edge deployments where you need thousands of proxy instances. MicroWARP changes this equation entirely, delivering full SOCKS5 proxy functionality in under 1MB of memory.</p><p>This isn&rsquo;t theoretical optimization. When you&rsquo;re deploying IoT gateways, serverless functions, or high-density Kubernetes pods, the difference between 100MB and 800KB per instance determines whether your infrastructure costs $10,000 or $100 per month. I&rsquo;ve seen teams abandon WARP entirely because they couldn&rsquo;t justify the memory overhead—MicroWARP solves this problem at the architectural level.</p><p>In this guide, you&rsquo;ll understand exactly why MicroWARP achieves roughly 100x memory reduction, how to deploy it in production environments, and when this approach makes sense for your infrastructure.</p><h2 id=prerequisites>Prerequisites</h2><p>Before diving in, ensure you have:</p><ul><li><strong>Docker Engine 20.10+</strong> with BuildKit enabled</li><li><strong>Linux kernel 5.6+</strong> (for native WireGuard support)</li><li><strong>Basic understanding of networking concepts</strong> (TCP/IP, proxies, VPNs)</li><li><strong>A Cloudflare account</strong> with WARP registration capability</li><li><strong>kubectl</strong> if deploying to Kubernetes</li><li><strong>2GB free disk space</strong> for building images</li></ul><p>Verify your kernel supports WireGuard:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Check kernel version</span>
+</span></span><span class=line><span class=cl>uname -r
+</span></span><span class=line><span class=cl><span class=c1># Should output 5.6 or higher</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Verify WireGuard module availability</span>
+</span></span><span class=line><span class=cl>sudo modprobe wireguard
+</span></span><span class=line><span class=cl>lsmod <span class=p>|</span> grep wireguard
+</span></span><span class=line><span class=cl><span class=c1># Should show wireguard module loaded</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 If you&rsquo;re on an older kernel, WireGuard can be compiled as a DKMS module, but native kernel support provides the performance benefits we&rsquo;ll discuss.</p></blockquote><h2 id=architecture-and-key-concepts>Architecture and Key Concepts</h2><h3 id=why-traditional-warp-clients-are-memory-hungry>Why Traditional WARP Clients Are Memory-Hungry</h3><p>The official Cloudflare WARP client (<code>warp-cli</code>) is designed for end-user devices. It includes:</p><ul><li>A full GUI framework (even in CLI mode, libraries are loaded)</li><li>User-space TUN/TAP packet processing</li><li>DNS resolution caching with extensive buffers</li><li>Connection pooling for multiple simultaneous tunnels</li><li>Automatic update mechanisms</li><li>Telemetry and diagnostics systems</li></ul><p>Each of these features adds memory overhead. The user-space packet processing alone requires copying every network packet between kernel and application memory—twice per packet direction.</p><h3 id=microwarps-kernel-first-architecture>MicroWARP&rsquo;s Kernel-First Architecture</h3><p>MicroWARP takes a fundamentally different approach: push everything possible into kernel space and keep user space minimal.</p><pre tabindex=0><code>┌─────────────────────────────────────┐    ┌─────────────────────────────────────┐
+│   Traditional WARP Architecture     │    │      MicroWARP Architecture         │
+├─────────────────────────────────────┤    ├─────────────────────────────────────┤
+│                                     │    │                                     │
+│  ┌───────────────┐                  │    │  ┌───────────────┐                  │
+│  │  Application  │                  │    │  │  Application  │                  │
+│  └───────┬───────┘                  │    │  └───────┬───────┘                  │
+│          ▼                          │    │          ▼                          │
+│  ┌───────────────┐ ◄─ User Space    │    │  ┌───────────────┐ ◄─ User Space    │
+│  │ SOCKS5 Proxy  │    (High Memory) │    │  │ Minimal SOCKS5│    (~200KB RSS)  │
+│  └───────┬───────┘                  │    │  │    Server     │                  │
+│          ▼                          │    │  └───────┬───────┘                  │
+│  ┌───────────────┐ ◄─ User Space    │    │          ▼                          │
+│  │  TUN Device   │    Processing    │    │  ┌───────────────┐ ◄─ Kernel Space  │
+│  └───────┬───────┘                  │    │  │   WireGuard   │    (Zero RSS)    │
+│          ▼                          │    │  │ Kernel Module │                  │
+│  ┌───────────────┐ ◄─ User Space    │    │  └───────┬───────┘                  │
+│  │   WireGuard   │                  │    │          ▼                          │
+│  └───────┬───────┘                  │    │  ┌───────────────┐                  │
+│          ▼                          │    │  │ Kernel Network│                  │
+│  ┌───────────────┐                  │    │  │     Stack     │                  │
+│  │ Kernel Network│                  │    │  └───────┬───────┘                  │
+│  │     Stack     │                  │    │          ▼                          │
+│  └───────┬───────┘                  │    │  ┌───────────────┐                  │
+│          ▼                          │    │  │  Physical NIC │                  │
+│  ┌───────────────┐                  │    │  └───────────────┘                  │
+│  │  Physical NIC │                  │    │                                     │
+│  └───────────────┘                  │    │                                     │
+└─────────────────────────────────────┘    └─────────────────────────────────────┘
+</code></pre><p>The critical insight: WireGuard has been part of the Linux kernel since version 5.6. When you use the kernel module instead of user-space implementations, packet processing happens entirely in kernel memory. No buffer copies, no context switches, no garbage collection overhead.</p><h3 id=memory-breakdown-comparison>Memory Breakdown Comparison</h3><table><thead><tr><th>Component</th><th>Traditional WARP</th><th>MicroWARP</th></tr></thead><tbody><tr><td>WireGuard processing</td><td>15-30MB (user-space)</td><td>0MB (kernel)</td></tr><tr><td>SOCKS5 proxy</td><td>20-40MB</td><td>~200KB</td></tr><tr><td>DNS caching</td><td>10-20MB</td><td>0MB (delegated)</td></tr><tr><td>Connection buffers</td><td>30-50MB</td><td>~400KB</td></tr><tr><td>Runtime overhead</td><td>10-20MB</td><td>~200KB</td></tr><tr><td><strong>Total</strong></td><td><strong>85-160MB</strong></td><td><strong>~800KB</strong></td></tr></tbody></table><h3 id=the-socks5-minimal-implementation>The SOCKS5 Minimal Implementation</h3><p>MicroWARP&rsquo;s SOCKS5 server is written in pure C with zero external dependencies beyond libc. It uses:</p><ul><li><strong>Single-threaded event loop</strong> with <code>epoll()</code> instead of thread-per-connection</li><li><strong>Fixed-size buffer pools</strong> instead of dynamic allocation</li><li><strong>Direct socket forwarding</strong> without intermediate buffering when possible</li></ul><pre tabindex=0><code>┌─────────────────────────────────────────────────────────────────────────────┐
+│                        MicroWARP Data Flow                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Application          SOCKS5 Server       WireGuard (Kernel)   Cloudflare  │
+│      │                     │                     │                  │       │
+│      │ SOCKS5 CONNECT      │                     │                  │       │
+│      │────────────────────►│                     │                  │       │
+│      │                     │                     │                  │       │
+│      │                     │ Parse destination   │                  │       │
+│      │                     │ (minimal allocation)│                  │       │
+│      │                     │                     │                  │       │
+│      │                     │ Connect via wg0     │                  │       │
+│      │                     │────────────────────►│                  │       │
+│      │                     │                     │                  │       │
+│      │                     │                     │ Encrypted tunnel │       │
+│      │                     │                     │ (kernel space)   │       │
+│      │                     │                     │─────────────────►│       │
+│      │                     │                     │                  │       │
+│      │                     │                     │◄─────────────────│       │
+│      │                     │                     │ Connection       │       │
+│      │                     │◄────────────────────│ established      │       │
+│      │                     │ Socket ready        │                  │       │
+│      │◄────────────────────│                     │                  │       │
+│      │ SOCKS5 success      │                     │                  │       │
+│      │                     │                     │                  │       │
+│      │ ═══════════════════════════════════════════════════════════ │       │
+│      │                    Data Transfer Loop                        │       │
+│      │ ═══════════════════════════════════════════════════════════ │       │
+│      │                     │                     │                  │       │
+│      │ Application data    │                     │                  │       │
+│      │────────────────────►│                     │                  │       │
+│      │                     │ splice() zero-copy  │                  │       │
+│      │                     │────────────────────►│                  │       │
+│      │                     │                     │ Encrypted        │       │
+│      │                     │                     │─────────────────►│       │
+│      │                     │                     │◄─────────────────│       │
+│      │                     │◄────────────────────│ Response         │       │
+│      │                     │ splice() zero-copy  │                  │       │
+│      │◄────────────────────│                     │                  │       │
+│      │ Response data       │                     │                  │       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+</code></pre><p>The <code>splice()</code> system call is crucial here—it transfers data between file descriptors entirely in kernel space, avoiding the copy to user memory that <code>read()</code>/<code>write()</code> would require.</p><h2 id=step-by-step-implementation>Step-by-Step Implementation</h2><h3 id=setting-up-the-base-microwarp-container>Setting Up the Base MicroWARP Container</h3><p>First, create the project structure:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>mkdir microwarp-deployment <span class=o>&amp;&amp;</span> <span class=nb>cd</span> microwarp-deployment
+</span></span><span class=line><span class=cl>mkdir -p config scripts
+</span></span></code></pre></td></tr></table></div></div><p>Create the Docker Compose configuration:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># docker-compose.yml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;3.8&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>services</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>microwarp</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io/microwarp/microwarp:latest</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>container_name</span><span class=p>:</span><span class=w> </span><span class=l>microwarp-proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Required for WireGuard kernel module access</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>cap_add</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>NET_ADMIN</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>SYS_MODULE</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Access to kernel networking</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>sysctls</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>net.ipv4.conf.all.src_valid_mark=1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>net.ipv4.ip_forward=1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>net.ipv6.conf.all.disable_ipv6=0</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Mount WireGuard configuration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>./config/wg0.conf:/etc/wireguard/wg0.conf:ro</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>/lib/modules:/lib/modules:ro</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Expose SOCKS5 proxy port</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>ports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=s2>&#34;1080:1080&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Resource constraints demonstrating minimal footprint</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>deploy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>limits</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=l>4M </span><span class=w> </span><span class=c># 4MB limit with 800KB typical usage</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>cpus</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;0.1&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>reservations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=l>1M</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># Health check for orchestration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>healthcheck</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>test</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&#34;CMD&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;nc&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;-z&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;localhost&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;1080&#34;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>interval</span><span class=p>:</span><span class=w> </span><span class=l>30s</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>timeout</span><span class=p>:</span><span class=w> </span><span class=l>5s</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>retries</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>start_period</span><span class=p>:</span><span class=w> </span><span class=l>10s</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>restart</span><span class=p>:</span><span class=w> </span><span class=l>unless-stopped</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>environment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>SOCKS5_PORT=1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>SOCKS5_BIND=0.0.0.0</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>LOG_LEVEL=warn</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>BUFFER_SIZE=16384 </span><span class=w> </span><span class=c># 16KB buffers, tunable</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ The <code>NET_ADMIN</code> and <code>SYS_MODULE</code> capabilities are required for WireGuard interface management. In production Kubernetes, use a privileged init container or pre-configure the interface at the node level.</p></blockquote><h3 id=generating-warp-configuration>Generating WARP Configuration</h3><p>Cloudflare WARP uses WireGuard under the hood. We need to register with WARP and extract the WireGuard configuration:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span><span class=lnt>62
+</span><span class=lnt>63
+</span><span class=lnt>64
+</span><span class=lnt>65
+</span><span class=lnt>66
+</span><span class=lnt>67
+</span><span class=lnt>68
+</span><span class=lnt>69
+</span><span class=lnt>70
+</span><span class=lnt>71
+</span><span class=lnt>72
+</span><span class=lnt>73
+</span><span class=lnt>74
+</span><span class=lnt>75
+</span><span class=lnt>76
+</span><span class=lnt>77
+</span><span class=lnt>78
+</span><span class=lnt>79
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=cp>#!/bin/bash
+</span></span></span><span class=line><span class=cl><span class=c1># scripts/generate-warp-config.sh</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># This script registers with Cloudflare WARP and generates WireGuard config</span>
+</span></span><span class=line><span class=cl><span class=c1># Requires: curl, jq, wg (wireguard-tools)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nb>set</span> -euo pipefail
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nv>CONFIG_DIR</span><span class=o>=</span><span class=s2>&#34;</span><span class=si>${</span><span class=nv>1</span><span class=k>:-</span><span class=p>./config</span><span class=si>}</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>mkdir -p <span class=s2>&#34;</span><span class=nv>$CONFIG_DIR</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nb>echo</span> <span class=s2>&#34;Generating WireGuard keypair...&#34;</span>
+</span></span><span class=line><span class=cl><span class=nv>PRIVATE_KEY</span><span class=o>=</span><span class=k>$(</span>wg genkey<span class=k>)</span>
+</span></span><span class=line><span class=cl><span class=nv>PUBLIC_KEY</span><span class=o>=</span><span class=k>$(</span><span class=nb>echo</span> <span class=s2>&#34;</span><span class=nv>$PRIVATE_KEY</span><span class=s2>&#34;</span> <span class=p>|</span> wg pubkey<span class=k>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nb>echo</span> <span class=s2>&#34;Registering with Cloudflare WARP...&#34;</span>
+</span></span><span class=line><span class=cl><span class=c1># Registration endpoint (this creates a new device)</span>
+</span></span><span class=line><span class=cl><span class=nv>REGISTRATION</span><span class=o>=</span><span class=k>$(</span>curl -sS -X POST <span class=s2>&#34;https://api.cloudflareclient.com/v0a2158/reg&#34;</span> <span class=se>\
+</span></span></span><span class=line><span class=cl>  -H <span class=s2>&#34;Content-Type: application/json&#34;</span> <span class=se>\
+</span></span></span><span class=line><span class=cl>  -H <span class=s2>&#34;CF-Client-Version: a-6.11-2223&#34;</span> <span class=se>\
+</span></span></span><span class=line><span class=cl>  -d <span class=s2>&#34;{
+</span></span></span><span class=line><span class=cl><span class=s2>    \&#34;key\&#34;: \&#34;</span><span class=nv>$PUBLIC_KEY</span><span class=s2>\&#34;,
+</span></span></span><span class=line><span class=cl><span class=s2>    \&#34;install_id\&#34;: \&#34;\&#34;,
+</span></span></span><span class=line><span class=cl><span class=s2>    \&#34;fcm_token\&#34;: \&#34;\&#34;,
+</span></span></span><span class=line><span class=cl><span class=s2>    \&#34;tos\&#34;: \&#34;</span><span class=k>$(</span>date -u +%Y-%m-%dT%H:%M:%S.000Z<span class=k>)</span><span class=s2>\&#34;,
+</span></span></span><span class=line><span class=cl><span class=s2>    \&#34;model\&#34;: \&#34;Linux\&#34;,
+</span></span></span><span class=line><span class=cl><span class=s2>    \&#34;serial_number\&#34;: \&#34;</span><span class=k>$(</span>cat /proc/sys/kernel/random/uuid<span class=k>)</span><span class=s2>\&#34;
+</span></span></span><span class=line><span class=cl><span class=s2>  }&#34;</span><span class=k>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Check for registration errors</span>
+</span></span><span class=line><span class=cl><span class=k>if</span> <span class=nb>echo</span> <span class=s2>&#34;</span><span class=nv>$REGISTRATION</span><span class=s2>&#34;</span> <span class=p>|</span> jq -e <span class=s1>&#39;.success == false&#39;</span> &gt; /dev/null 2&gt;<span class=p>&amp;</span>1<span class=p>;</span> <span class=k>then</span>
+</span></span><span class=line><span class=cl>    <span class=nb>echo</span> <span class=s2>&#34;Error: Registration failed&#34;</span>
+</span></span><span class=line><span class=cl>    <span class=nb>echo</span> <span class=s2>&#34;</span><span class=nv>$REGISTRATION</span><span class=s2>&#34;</span> <span class=p>|</span> jq <span class=s1>&#39;.errors&#39;</span>
+</span></span><span class=line><span class=cl>    <span class=nb>exit</span> <span class=m>1</span>
+</span></span><span class=line><span class=cl><span class=k>fi</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Extract configuration values</span>
+</span></span><span class=line><span class=cl><span class=nv>WARP_ID</span><span class=o>=</span><span class=k>$(</span><span class=nb>echo</span> <span class=s2>&#34;</span><span class=nv>$REGISTRATION</span><span class=s2>&#34;</span> <span class=p>|</span> jq -r <span class=s1>&#39;.id&#39;</span><span class=k>)</span>
+</span></span><span class=line><span class=cl><span class=nv>WARP_TOKEN</span><span class=o>=</span><span class=k>$(</span><span class=nb>echo</span> <span class=s2>&#34;</span><span class=nv>$REGISTRATION</span><span class=s2>&#34;</span> <span class=p>|</span> jq -r <span class=s1>&#39;.token&#39;</span><span class=k>)</span>
+</span></span><span class=line><span class=cl><span class=nv>WARP_ENDPOINT</span><span class=o>=</span><span class=k>$(</span><span class=nb>echo</span> <span class=s2>&#34;</span><span class=nv>$REGISTRATION</span><span class=s2>&#34;</span> <span class=p>|</span> jq -r <span class=s1>&#39;.config.peers[0].endpoint.host&#39;</span><span class=k>)</span>
+</span></span><span class=line><span class=cl><span class=nv>WARP_PEER_KEY</span><span class=o>=</span><span class=k>$(</span><span class=nb>echo</span> <span class=s2>&#34;</span><span class=nv>$REGISTRATION</span><span class=s2>&#34;</span> <span class=p>|</span> jq -r <span class=s1>&#39;.config.peers[0].public_key&#39;</span><span class=k>)</span>
+</span></span><span class=line><span class=cl><span class=nv>CLIENT_IPV4</span><span class=o>=</span><span class=k>$(</span><span class=nb>echo</span> <span class=s2>&#34;</span><span class=nv>$REGISTRATION</span><span class=s2>&#34;</span> <span class=p>|</span> jq -r <span class=s1>&#39;.config.interface.addresses.v4&#39;</span><span class=k>)</span>
+</span></span><span class=line><span class=cl><span class=nv>CLIENT_IPV6</span><span class=o>=</span><span class=k>$(</span><span class=nb>echo</span> <span class=s2>&#34;</span><span class=nv>$REGISTRATION</span><span class=s2>&#34;</span> <span class=p>|</span> jq -r <span class=s1>&#39;.config.interface.addresses.v6&#39;</span><span class=k>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nb>echo</span> <span class=s2>&#34;Generating WireGuard configuration...&#34;</span>
+</span></span><span class=line><span class=cl>cat &gt; <span class=s2>&#34;</span><span class=nv>$CONFIG_DIR</span><span class=s2>/wg0.conf&#34;</span> <span class=s>&lt;&lt; EOF
+</span></span></span><span class=line><span class=cl><span class=s>[Interface]
+</span></span></span><span class=line><span class=cl><span class=s># MicroWARP WireGuard Configuration
+</span></span></span><span class=line><span class=cl><span class=s># Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+</span></span></span><span class=line><span class=cl><span class=s>PrivateKey = $PRIVATE_KEY
+</span></span></span><span class=line><span class=cl><span class=s>Address = $CLIENT_IPV4/32, $CLIENT_IPV6/128
+</span></span></span><span class=line><span class=cl><span class=s>DNS = 1.1.1.1, 2606:4700:4700::1111
+</span></span></span><span class=line><span class=cl><span class=s># Keep MTU low to avoid fragmentation in containers
+</span></span></span><span class=line><span class=cl><span class=s>MTU = 1280
+</span></span></span><span class=line><span class=cl><span class=s>
+</span></span></span><span class=line><span class=cl><span class=s>[Peer]
+</span></span></span><span class=line><span class=cl><span class=s># Cloudflare WARP endpoint
+</span></span></span><span class=line><span class=cl><span class=s>PublicKey = $WARP_PEER_KEY
+</span></span></span><span class=line><span class=cl><span class=s>AllowedIPs = 0.0.0.0/0, ::/0
+</span></span></span><span class=line><span class=cl><span class=s>Endpoint = ${WARP_ENDPOINT}:2408
+</span></span></span><span class=line><span class=cl><span class=s># Keepalive essential for NAT traversal in containers
+</span></span></span><span class=line><span class=cl><span class=s>PersistentKeepalive = 25
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Store credentials for potential re-registration</span>
+</span></span><span class=line><span class=cl>cat &gt; <span class=s2>&#34;</span><span class=nv>$CONFIG_DIR</span><span class=s2>/warp-credentials.json&#34;</span> <span class=s>&lt;&lt; EOF
+</span></span></span><span class=line><span class=cl><span class=s>{
+</span></span></span><span class=line><span class=cl><span class=s>  &#34;id&#34;: &#34;$WARP_ID&#34;,
+</span></span></span><span class=line><span class=cl><span class=s>  &#34;token&#34;: &#34;$WARP_TOKEN&#34;,
+</span></span></span><span class=line><span class=cl><span class=s>  &#34;public_key&#34;: &#34;$PUBLIC_KEY&#34;
+</span></span></span><span class=line><span class=cl><span class=s>}
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>chmod <span class=m>600</span> <span class=s2>&#34;</span><span class=nv>$CONFIG_DIR</span><span class=s2>/wg0.conf&#34;</span> <span class=s2>&#34;</span><span class=nv>$CONFIG_DIR</span><span class=s2>/warp-credentials.json&#34;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nb>echo</span> <span class=s2>&#34;Configuration generated successfully!&#34;</span>
+</span></span><span class=line><span class=cl><span class=nb>echo</span> <span class=s2>&#34;WARP Device ID: </span><span class=nv>$WARP_ID</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl><span class=nb>echo</span> <span class=s2>&#34;Client IPv4: </span><span class=nv>$CLIENT_IPV4</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl><span class=nb>echo</span> <span class=s2>&#34;Client IPv6: </span><span class=nv>$CLIENT_IPV6</span><span class=s2>&#34;</span>
+</span></span></code></pre></td></tr></table></div></div><p>Run the configuration generator:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>chmod +x scripts/generate-warp-config.sh
+</span></span><span class=line><span class=cl>./scripts/generate-warp-config.sh
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>📝 The generated configuration registers a new WARP device with Cloudflare. Each device has usage limits on the free tier. For production, use WARP+ or Cloudflare Zero Trust with your organization&rsquo;s credentials.</p></blockquote><h3 id=deploying-as-a-kubernetes-sidecar>Deploying as a Kubernetes Sidecar</h3><p>For Kubernetes deployments, MicroWARP excels as a sidecar proxy. Here&rsquo;s a complete deployment manifest:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># kubernetes/deployment-with-sidecar.yaml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>apps/v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Deployment</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>app-with-warp-proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>app</span><span class=p>:</span><span class=w> </span><span class=l>proxied-application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>replicas</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>selector</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>matchLabels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>app</span><span class=p>:</span><span class=w> </span><span class=l>proxied-application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>template</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>app</span><span class=p>:</span><span class=w> </span><span class=l>proxied-application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>annotations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Track MicroWARP sidecar for monitoring</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>prometheus.io/scrape</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;true&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>prometheus.io/port</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;9090&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>spec</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Init container to set up WireGuard interface</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>initContainers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>wireguard-init</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io/microwarp/microwarp-init:latest</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>securityContext</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>capabilities</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>add</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span>- <span class=l>NET_ADMIN</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>privileged</span><span class=p>:</span><span class=w> </span><span class=kc>false</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>volumeMounts</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>wg-config</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>mountPath</span><span class=p>:</span><span class=w> </span><span class=l>/etc/wireguard</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>readOnly</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>command</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=l>/bin/sh</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- -<span class=l>c</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>              # Load WireGuard kernel module if not loaded
+</span></span></span><span class=line><span class=cl><span class=sd>              modprobe wireguard || true
+</span></span></span><span class=line><span class=cl><span class=sd>              # Create interface (will be used by sidecar)
+</span></span></span><span class=line><span class=cl><span class=sd>              wg-quick up wg0 || true
+</span></span></span><span class=line><span class=cl><span class=sd>              echo &#34;WireGuard interface initialized&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>containers</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># Main application container</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>application</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>your-app:latest</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># Configure app to use sidecar SOCKS5 proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>HTTP_PROXY</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;socks5://127.0.0.1:1080&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>HTTPS_PROXY</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;socks5://127.0.0.1:1080&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>ALL_PROXY</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;socks5://127.0.0.1:1080&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>limits</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;256Mi&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>cpu</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;500m&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=c># MicroWARP sidecar - note the minimal resources</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>microwarp-sidecar</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io/microwarp/microwarp:latest</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>ports</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>containerPort</span><span class=p>:</span><span class=w> </span><span class=m>1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>socks5</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>protocol</span><span class=p>:</span><span class=w> </span><span class=l>TCP</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>env</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>SOCKS5_PORT</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;1080&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>SOCKS5_BIND</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;127.0.0.1&#34;</span><span class=w>  </span><span class=c># Only localhost in sidecar mode</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>LOG_LEVEL</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>value</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;error&#34;</span><span class=w>  </span><span class=c># Minimal logging for production</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=c># These limits are not aspirational - they&#39;re real</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>limits</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;4Mi&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>cpu</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;50m&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>requests</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;1Mi&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>cpu</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;10m&#34;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>securityContext</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>capabilities</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>add</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>                </span>- <span class=l>NET_ADMIN</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>readOnlyRootFilesystem</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>runAsNonRoot</span><span class=p>:</span><span class=w> </span><span class=kc>false</span><span class=w>  </span><span class=c># Required for interface management</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>livenessProbe</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>tcpSocket</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>port</span><span class=p>:</span><span class=w> </span><span class=m>1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>initialDelaySeconds</span><span class=p>:</span><span class=w> </span><span class=m>5</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>periodSeconds</span><span class=p>:</span><span class=w> </span><span class=m>10</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>readinessProbe</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>tcpSocket</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>port</span><span class=p>:</span><span class=w> </span><span class=m>1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>initialDelaySeconds</span><span class=p>:</span><span class=w> </span><span class=m>2</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>periodSeconds</span><span class=p>:</span><span class=w> </span><span class=m>5</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>volumeMounts</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>wg-config</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>mountPath</span><span class=p>:</span><span class=w> </span><span class=l>/etc/wireguard</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>              </span><span class=nt>readOnly</span><span class=p>:</span><span class=w> </span><span class=kc>true</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>wg-config</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>secret</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>secretName</span><span class=p>:</span><span class=w> </span><span class=l>microwarp-wg-config</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>defaultMode</span><span class=p>:</span><span class=w> </span><span class=m>0600</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nn>---</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=c># Secret containing WireGuard configuration</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>Secret</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>microwarp-wg-config</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>Opaque</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>stringData</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>wg0.conf</span><span class=p>:</span><span class=w> </span><span class=p>|</span><span class=sd>
+</span></span></span><span class=line><span class=cl><span class=sd>    [Interface]
+</span></span></span><span class=line><span class=cl><span class=sd>    PrivateKey = YOUR_PRIVATE_KEY_HERE
+</span></span></span><span class=line><span class=cl><span class=sd>    Address = 172.16.0.2/32
+</span></span></span><span class=line><span class=cl><span class=sd>    MTU = 1280
+</span></span></span><span class=line><span class=cl><span class=sd>    
+</span></span></span><span class=line><span class=cl><span class=sd>    [Peer]
+</span></span></span><span class=line><span class=cl><span class=sd>    PublicKey = CLOUDFLARE_PUBLIC_KEY
+</span></span></span><span class=line><span class=cl><span class=sd>    AllowedIPs = 0.0.0.0/0, ::/0
+</span></span></span><span class=line><span class=cl><span class=sd>    Endpoint = engage.cloudflareclient.com:2408
+</span></span></span><span class=line><span class=cl><span class=sd>    PersistentKeepalive = 25</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><h2 id=production-configuration>Production Configuration</h2><h3 id=multi-container-network-topology>Multi-Container Network Topology</h3><p>When multiple containers need to share a single MicroWARP proxy, use Docker&rsquo;s network features:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=c># docker-compose.production.yml</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>version</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;3.8&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>networks</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>proxy-network</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>driver</span><span class=p>:</span><span class=w> </span><span class=l>bridge</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>ipam</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>config</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span>- <span class=nt>subnet</span><span class=p>:</span><span class=w> </span><span class=m>172.28.0.0</span><span class=l>/16</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>services</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>microwarp</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io/microwarp/microwarp:latest</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>container_name</span><span class=p>:</span><span class=w> </span><span class=l>shared-proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>networks</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>proxy-network</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>ipv4_address</span><span class=p>:</span><span class=w> </span><span class=m>172.28.0.10</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>cap_add</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>NET_ADMIN</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>volumes</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>./config/wg0.conf:/etc/wireguard/wg0.conf:ro</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>environment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>SOCKS5_PORT=1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>SOCKS5_BIND=0.0.0.0</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Connection limits to prevent resource exhaustion</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>MAX_CONNECTIONS=500</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>CONNECTION_TIMEOUT=30</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>deploy</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>resources</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>limits</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>memory</span><span class=p>:</span><span class=w> </span><span class=l>8M </span><span class=w> </span><span class=c># Higher limit for shared proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>cpus</span><span class=p>:</span><span class=w> </span><span class=s1>&#39;0.2&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>healthcheck</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>test</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&#34;CMD&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;nc&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;-z&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;localhost&#34;</span><span class=p>,</span><span class=w> </span><span class=s2>&#34;1080&#34;</span><span class=p>]</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>interval</span><span class=p>:</span><span class=w> </span><span class=l>10s</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>timeout</span><span class=p>:</span><span class=w> </span><span class=l>3s</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>retries</span><span class=p>:</span><span class=w> </span><span class=m>3</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=c># Example application containers using shared proxy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>web-scraper</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>python:3.11-slim</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>networks</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>proxy-network</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>environment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>HTTP_PROXY=socks5://172.28.0.10:1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>HTTPS_PROXY=socks5://172.28.0.10:1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>depends_on</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>microwarp</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>service_healthy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>command</span><span class=p>:</span><span class=w> </span><span class=l>python scraper.py</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>api-client</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>image</span><span class=p>:</span><span class=w> </span><span class=l>node:20-alpine</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>networks</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>proxy-network</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>environment</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>ALL_PROXY=socks5://172.28.0.10:1080</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>depends_on</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>microwarp</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>condition</span><span class=p>:</span><span class=w> </span><span class=l>service_healthy</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>command</span><span class=p>:</span><span class=w> </span><span class=l>node client.js</span><span class=w>
+</span></span></span></code></pre></td></tr></table></div></div><h3 id=tuning-buffer-sizes>Tuning Buffer Sizes</h3><p>The buffer size directly impacts memory usage and throughput. Here&rsquo;s how to tune it:</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span><span class=lnt>8
+</span><span class=lnt>9
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Environment variables for MicroWARP tuning</span>
+</span></span><span class=line><span class=cl><span class=nv>BUFFER_SIZE</span><span class=o>=</span><span class=m>16384</span>      <span class=c1># 16KB - good for most HTTP traffic</span>
+</span></span><span class=line><span class=cl><span class=nv>BUFFER_SIZE</span><span class=o>=</span><span class=m>65536</span>      <span class=c1># 64KB - better for file transfers</span>
+</span></span><span class=line><span class=cl><span class=nv>BUFFER_SIZE</span><span class=o>=</span><span class=m>4096</span>       <span class=c1># 4KB - minimum for memory-constrained environments</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Calculate expected memory usage:</span>
+</span></span><span class=line><span class=cl><span class=c1># Base overhead: ~200KB</span>
+</span></span><span class=line><span class=cl><span class=c1># Per-connection: BUFFER_SIZE * 2 (read + write buffers)</span>
+</span></span><span class=line><span class=cl><span class=c1># Example with 100 connections and 16</span>
+</span></span></code></pre></td></tr></table></div></div></article></main><script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js crossorigin=anonymous></script><script>mermaid.init(0[0],"code.language-mermaid")</script></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.159.0
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p><p class="mt-0 text-xs font-mono opacity-50">next gen → 2026-03-30</p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>
