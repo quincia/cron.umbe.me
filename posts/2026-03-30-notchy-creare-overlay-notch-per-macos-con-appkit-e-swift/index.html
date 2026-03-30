@@ -1,0 +1,1059 @@
+<!doctype html><html lang=en><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta property="og:url" content="https://cron.umbe.me/posts/2026-03-30-notchy-creare-overlay-notch-per-macos-con-appkit-e-swift/"><meta property="og:site_name" content="cron.umbe.me"><meta property="og:title" content="Notchy: Creare Overlay Notch per macOS con AppKit e Swift"><meta property="og:description" content="Guida completa per sviluppare widget dinamici stile Dynamic Island per il notch dei MacBook Pro usando AppKit, Combine e Swift 5.7."><meta property="og:locale" content="it"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2026-03-30T08:00:00+01:00"><meta property="article:modified_time" content="2026-03-30T08:00:00+01:00"><meta property="article:tag" content="Swift"><meta property="article:tag" content="Macos"><meta property="article:tag" content="Appkit"><meta property="article:tag" content="Pimcore"><meta property="article:tag" content="Intermediate-Tutorial"><meta property="article:tag" content="Italiano"><meta name=twitter:card content="summary"><meta name=twitter:title content="Notchy: Creare Overlay Notch per macOS con AppKit e Swift"><meta name=twitter:description content="Guida completa per sviluppare widget dinamici stile Dynamic Island per il notch dei MacBook Pro usando AppKit, Combine e Swift 5.7."><script async src="https://www.googletagmanager.com/gtag/js?id=G-T337LHMQNF"></script><script>var doNotTrack=!1,dnt=navigator.doNotTrack||window.doNotTrack||navigator.msDoNotTrack,doNotTrack=dnt=="1"||dnt=="yes";if(!doNotTrack){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date),gtag("config","G-T337LHMQNF")}</script><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#181818"><title>cron.umbe.me - Notchy: Creare Overlay Notch per macOS con AppKit e Swift</title><link rel=icon href=/favicon.svg type=image/svg+xml><link rel="shortcut icon" href=/favicon.ico type=image/x-icon><link rel=stylesheet href=/minima.54cfcb44e10b4015b41a13771763013b79bdba6a92e49ea4a77bb44db465e761.css integrity="sha256-VM/LROELQBW0GhN3F2MBO3m9umqS5J6kp3u0TbRl52E="><link rel=stylesheet href=/css/custom.css><script defer type=text/javascript src=/minima.0fd13d0809f6d20301e1285f3f521ceb44e122bca7ab703c4178b5220be4bc9b.js integrity="sha256-D9E9CAn20gMB4ShfP1Ic60ThIrynq3A8QXi1IgvkvJs="></script></head><script>const theme_config="light",theme_light=theme_config==="system"?"light":theme_config;let theme=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":theme_light;try{localStorage.setItem("theme",theme),window.minima_theme=theme,document.querySelector("html").classList.add(theme)}catch{}</script><body><header class="mt-3 mb-8"><div class="container mx-auto"><nav class="flex justify-between items-center"><ul class="flex items-center text-base font-semibold
+whitespace-nowrap overflow-x-auto overflow-y-hidden"><li class="ml-2 mr-2"><a href=/>Home</a></li><li class="ml-2 mr-2"><a href=/tags>Tags</a></li><li class="ml-2 mr-2"><a href=/series>Serie</a></li><li class="ml-2 mr-2"><a href=/search>🔍</a></li><li class="ml-2 mr-2"><a href=/about>About</a></li></ul><ul class="flex item-center text-sm font-semibold"><li class=ml-2><a href=https://cron.umbe.me/>IT</a></li><li class=ml-2><a href=https://cron.umbe.me/en/>EN</a></li></ul></nav></div></header><div class="container mx-auto"><h1 class="text-4xl font-extrabold mt-6 mb-4">Notchy: Creare Overlay Notch per macOS con AppKit e Swift</h1><div class="mb-6 text-sm font-mono opacity-50"><div class=mb-1><span>2026-03-30</span>
+&#183; <span>11 min read</span>
+&#183; <span>gen:4m 22s</span> &#183; <span>tok:33399</span></div><div><a href=/tags/swift>#swift</a>
+<a href=/tags/macos>#macos</a>
+<a href=/tags/appkit>#appkit</a>
+<a href=/tags/pimcore>#pimcore</a>
+<a href=/tags/intermediate-tutorial>#intermediate-tutorial</a>
+<a href=/tags/italiano>#italiano</a></div></div><main class=mb-8><p>Guida completa per sviluppare widget dinamici stile Dynamic Island per il notch dei MacBook Pro usando AppKit, Combine e Swift 5.7.</p><article class=md><h1 id=building-custom-notch-overlays-for-macos-apps-with-notchy-a-deep-dive-into-dynamic-island-style-ui>Building Custom Notch Overlays for macOS Apps with Notchy: A Deep Dive into Dynamic Island-Style UI</h1><p>Il notch dei MacBook Pro è spazio sprecato. Apple lo usa per la fotocamera, ma quei pixel circostanti restano vuoti mentre scorri tra finestre cercando lo stato della tua build o i controlli di Spotify. Con Notchy, trasformiamo quella zona morta in un centro di comando contestuale — esattamente come Dynamic Island su iPhone, ma con la potenza di AppKit.</p><p>In questo articolo costruiremo un sistema completo di overlay per il notch: widget modulari che mostrano dati in tempo reale, si animano fluidamente e degradano con eleganza su hardware senza notch.</p><h2 id=prerequisiti>Prerequisiti</h2><p>Prima di iniziare, assicurati di avere:</p><ul><li><strong>macOS 12.0+</strong> (Monterey o successivo per le API del notch)</li><li><strong>Xcode 14+</strong> con Swift 5.7</li><li>Familiarità con <strong>AppKit</strong> e il sistema di coordinate di macOS</li><li>Conoscenza base di <strong>Combine</strong> per il reactive binding</li><li>Un Mac con notch (per testing completo) oppure accesso a un display esterno</li></ul><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>1
+</span><span class=lnt>2
+</span><span class=lnt>3
+</span><span class=lnt>4
+</span><span class=lnt>5
+</span><span class=lnt>6
+</span><span class=lnt>7
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Verifica la versione di Xcode</span>
+</span></span><span class=line><span class=cl>xcodebuild -version
+</span></span><span class=line><span class=cl><span class=c1># Output atteso: Xcode 14.0+ Build version 14A309+</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Crea il progetto</span>
+</span></span><span class=line><span class=cl>mkdir Notchy <span class=o>&amp;&amp;</span> <span class=nb>cd</span> Notchy
+</span></span><span class=line><span class=cl>swift package init --type executable --name Notchy
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 Se non hai un MacBook con notch, puoi usare il Simulator con device profile &ldquo;MacBook Pro 14-inch&rdquo; per testare la geometria dello schermo.</p></blockquote><h2 id=architettura-e-concetti-chiave>Architettura e Concetti Chiave</h2><p>Notchy si basa su tre pilastri: <strong>Screen Geometry Engine</strong> per rilevare e tracciare il notch, <strong>Widget Container</strong> per gestire i moduli UI, e <strong>Degradation Handler</strong> per gli edge case hardware.</p><pre tabindex=0><code class=language-mermaid data-lang=mermaid>flowchart TD
+    subgraph ScreenGeometry[&#34;Screen Geometry Engine&#34;]
+        A[NSScreen.main] --&gt; B{hasNotch?}
+        B --&gt;|Sì| C[Calcola safeAreaInsets]
+        B --&gt;|No| D[Fallback: Menu Bar Mode]
+        C --&gt; E[NotchFrame Struct]
+    end
+    
+    subgraph WidgetContainer[&#34;Widget Container&#34;]
+        E --&gt; F[NSWindow borderless]
+        F --&gt; G[Widget Registry]
+        G --&gt; H[BuildStatusWidget]
+        G --&gt; I[MediaControlWidget]
+        G --&gt; J[SystemMetricsWidget]
+    end
+    
+    subgraph DegradationHandler[&#34;Degradation Handler&#34;]
+        K[Screen Configuration Change] --&gt; L{Tipo Display?}
+        L --&gt;|Builtin + Notch| M[Full Overlay Mode]
+        L --&gt;|External| N[Compact Menu Extra]
+        L --&gt;|Screen Recording| O[Hidden Mode]
+    end
+    
+    H &amp; I &amp; J --&gt; P[Compositor]
+    P --&gt; Q[Animated Render]
+    M &amp; N &amp; O --&gt; Q
+</code></pre><p>Il flusso è lineare: interroghiamo <code>NSScreen</code> per ottenere la geometria del notch, creiamo una finestra borderless posizionata precisamente sopra di esso, e la popoliamo con widget registrati dinamicamente. Quando cambia la configurazione (nuovo display, recording attivo), il <code>DegradationHandler</code> decide la modalità di rendering.</p><blockquote><p>📝 La chiave è <code>NSScreen.safeAreaInsets</code> introdotta in macOS 12 — è l&rsquo;unica API ufficiale che espone le dimensioni del notch.</p></blockquote><h2 id=implementazione-passo-passo>Implementazione Passo-Passo</h2><h3 id=rilevamento-del-notch-e-calcolo-della-geometria>Rilevamento del Notch e Calcolo della Geometria</h3><p>Il primo passo è costruire un engine che rilevi il notch e calcoli il frame esatto dove posizionare l&rsquo;overlay. macOS non espone direttamente &ldquo;il notch&rdquo;, ma possiamo dedurlo dai <code>safeAreaInsets</code>.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-swift data-lang=swift><span class=line><span class=cl><span class=c1>// NotchGeometryEngine.swift</span>
+</span></span><span class=line><span class=cl><span class=kd>import</span> <span class=nc>AppKit</span>
+</span></span><span class=line><span class=cl><span class=kd>import</span> <span class=nc>Combine</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>/// Struttura che rappresenta la geometria del notch</span>
+</span></span><span class=line><span class=cl><span class=kd>struct</span> <span class=nc>NotchGeometry</span><span class=p>:</span> <span class=nb>Equatable</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kd>let</span> <span class=nv>frame</span><span class=p>:</span> <span class=n>NSRect</span>           <span class=c1>// Frame assoluto del notch in coordinate schermo</span>
+</span></span><span class=line><span class=cl>    <span class=kd>let</span> <span class=nv>displayID</span><span class=p>:</span> <span class=n>CGDirectDisplayID</span>
+</span></span><span class=line><span class=cl>    <span class=kd>let</span> <span class=nv>isBuiltIn</span><span class=p>:</span> <span class=nb>Bool</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>/// Area utilizzabile a sinistra del notch</span>
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>leftUsableArea</span><span class=p>:</span> <span class=n>NSRect</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>guard</span> <span class=kd>let</span> <span class=nv>screen</span> <span class=p>=</span> <span class=n>NSScreen</span><span class=p>.</span><span class=n>screens</span><span class=p>.</span><span class=bp>first</span><span class=p>(</span><span class=k>where</span><span class=p>:</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=p>(</span><span class=nv>$0</span><span class=p>.</span><span class=n>deviceDescription</span><span class=p>[</span><span class=n>NSDeviceDescriptionKey</span><span class=p>(</span><span class=s>&#34;NSScreenNumber&#34;</span><span class=p>)]</span> <span class=k>as</span><span class=p>?</span> <span class=n>CGDirectDisplayID</span><span class=p>)</span> <span class=p>==</span> <span class=n>displayID</span>
+</span></span><span class=line><span class=cl>        <span class=p>})</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=p>.</span><span class=n>zero</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>NSRect</span><span class=p>(</span><span class=n>x</span><span class=p>:</span> <span class=n>screen</span><span class=p>.</span><span class=n>frame</span><span class=p>.</span><span class=n>origin</span><span class=p>.</span><span class=n>x</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                      <span class=n>y</span><span class=p>:</span> <span class=n>frame</span><span class=p>.</span><span class=n>origin</span><span class=p>.</span><span class=n>y</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>                      <span class=n>width</span><span class=p>:</span> <span class=n>frame</span><span class=p>.</span><span class=n>origin</span><span class=p>.</span><span class=n>x</span> <span class=o>-</span> <span class=n>screen</span><span class=p>.</span><span class=n>frame</span><span class=p>.</span><span class=n>origin</span><span class=p>.</span><span class=n>x</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>                      <span class=n>height</span><span class=p>:</span> <span class=n>frame</span><span class=p>.</span><span class=n>height</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>/// Area utilizzabile a destra del notch</span>
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>rightUsableArea</span><span class=p>:</span> <span class=n>NSRect</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>guard</span> <span class=kd>let</span> <span class=nv>screen</span> <span class=p>=</span> <span class=n>NSScreen</span><span class=p>.</span><span class=n>screens</span><span class=p>.</span><span class=bp>first</span><span class=p>(</span><span class=k>where</span><span class=p>:</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=p>(</span><span class=nv>$0</span><span class=p>.</span><span class=n>deviceDescription</span><span class=p>[</span><span class=n>NSDeviceDescriptionKey</span><span class=p>(</span><span class=s>&#34;NSScreenNumber&#34;</span><span class=p>)]</span> <span class=k>as</span><span class=p>?</span> <span class=n>CGDirectDisplayID</span><span class=p>)</span> <span class=p>==</span> <span class=n>displayID</span>
+</span></span><span class=line><span class=cl>        <span class=p>})</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=p>.</span><span class=n>zero</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>NSRect</span><span class=p>(</span><span class=n>x</span><span class=p>:</span> <span class=n>frame</span><span class=p>.</span><span class=n>maxX</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                      <span class=n>y</span><span class=p>:</span> <span class=n>frame</span><span class=p>.</span><span class=n>origin</span><span class=p>.</span><span class=n>y</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                      <span class=n>width</span><span class=p>:</span> <span class=n>screen</span><span class=p>.</span><span class=n>frame</span><span class=p>.</span><span class=n>maxX</span> <span class=o>-</span> <span class=n>frame</span><span class=p>.</span><span class=n>maxX</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                      <span class=n>height</span><span class=p>:</span> <span class=n>frame</span><span class=p>.</span><span class=n>height</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kr>final</span> <span class=kd>class</span> <span class=nc>NotchGeometryEngine</span><span class=p>:</span> <span class=n>ObservableObject</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=p>@</span><span class=n>Published</span> <span class=kd>private</span><span class=p>(</span><span class=kr>set</span><span class=p>)</span> <span class=kd>var</span> <span class=nv>currentGeometry</span><span class=p>:</span> <span class=n>NotchGeometry</span><span class=p>?</span>
+</span></span><span class=line><span class=cl>    <span class=p>@</span><span class=n>Published</span> <span class=kd>private</span><span class=p>(</span><span class=kr>set</span><span class=p>)</span> <span class=kd>var</span> <span class=nv>hasNotch</span><span class=p>:</span> <span class=nb>Bool</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>var</span> <span class=nv>screenObserver</span><span class=p>:</span> <span class=nb>Any</span><span class=p>?</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>init</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>screenObserver</span> <span class=p>=</span> <span class=n>NotificationCenter</span><span class=p>.</span><span class=k>default</span><span class=p>.</span><span class=n>addObserver</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=n>forName</span><span class=p>:</span> <span class=n>NSApplication</span><span class=p>.</span><span class=n>didChangeScreenParametersNotification</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>object</span><span class=p>:</span> <span class=kc>nil</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>queue</span><span class=p>:</span> <span class=p>.</span><span class=n>main</span>
+</span></span><span class=line><span class=cl>        <span class=p>)</span> <span class=p>{</span> <span class=p>[</span><span class=kr>weak</span> <span class=kc>self</span><span class=p>]</span> <span class=kc>_</span> <span class=k>in</span>
+</span></span><span class=line><span class=cl>            <span class=kc>self</span><span class=p>?.</span><span class=n>recalculateGeometry</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=n>recalculateGeometry</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>/// Ricalcola la geometria del notch per lo schermo principale</span>
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>recalculateGeometry</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>guard</span> <span class=kd>let</span> <span class=nv>screen</span> <span class=p>=</span> <span class=n>NSScreen</span><span class=p>.</span><span class=n>main</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=n>currentGeometry</span> <span class=p>=</span> <span class=kc>nil</span>
+</span></span><span class=line><span class=cl>            <span class=n>hasNotch</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>insets</span> <span class=p>=</span> <span class=n>screen</span><span class=p>.</span><span class=n>safeAreaInsets</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>guard</span> <span class=n>insets</span><span class=p>.</span><span class=n>top</span> <span class=o>&gt;</span> <span class=mi>0</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=n>currentGeometry</span> <span class=p>=</span> <span class=kc>nil</span>
+</span></span><span class=line><span class=cl>            <span class=n>hasNotch</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=n>hasNotch</span> <span class=p>=</span> <span class=kc>true</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Calcola il frame del notch</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// Il notch è centrato orizzontalmente, largo circa 180pt su 14&#34;</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>notchWidth</span><span class=p>:</span> <span class=n>CGFloat</span> <span class=p>=</span> <span class=n>estimateNotchWidth</span><span class=p>(</span><span class=k>for</span><span class=p>:</span> <span class=n>screen</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>notchHeight</span><span class=p>:</span> <span class=n>CGFloat</span> <span class=p>=</span> <span class=n>insets</span><span class=p>.</span><span class=n>top</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>screenFrame</span> <span class=p>=</span> <span class=n>screen</span><span class=p>.</span><span class=n>frame</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>notchFrame</span> <span class=p>=</span> <span class=n>NSRect</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=n>x</span><span class=p>:</span> <span class=n>screenFrame</span><span class=p>.</span><span class=n>midX</span> <span class=o>-</span> <span class=p>(</span><span class=n>notchWidth</span> <span class=o>/</span> <span class=mi>2</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=n>y</span><span class=p>:</span> <span class=n>screenFrame</span><span class=p>.</span><span class=n>maxY</span> <span class=o>-</span> <span class=n>notchHeight</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>width</span><span class=p>:</span> <span class=n>notchWidth</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>height</span><span class=p>:</span> <span class=n>notchHeight</span>
+</span></span><span class=line><span class=cl>        <span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>displayID</span> <span class=p>=</span> <span class=n>screen</span><span class=p>.</span><span class=n>deviceDescription</span><span class=p>[</span><span class=n>NSDeviceDescriptionKey</span><span class=p>(</span><span class=s>&#34;NSScreenNumber&#34;</span><span class=p>)]</span> <span class=k>as</span><span class=p>?</span> <span class=n>CGDirectDisplayID</span> <span class=p>??</span> <span class=mi>0</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>isBuiltIn</span> <span class=p>=</span> <span class=n>CGDisplayIsBuiltin</span><span class=p>(</span><span class=n>displayID</span><span class=p>)</span> <span class=o>!=</span> <span class=mi>0</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=n>currentGeometry</span> <span class=p>=</span> <span class=n>NotchGeometry</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=n>frame</span><span class=p>:</span> <span class=n>notchFrame</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>displayID</span><span class=p>:</span> <span class=n>displayID</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>isBuiltIn</span><span class=p>:</span> <span class=n>isBuiltIn</span>
+</span></span><span class=line><span class=cl>        <span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>/// Stima la larghezza del notch in base alla risoluzione dello schermo</span>
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>func</span> <span class=nf>estimateNotchWidth</span><span class=p>(</span><span class=k>for</span> <span class=n>screen</span><span class=p>:</span> <span class=n>NSScreen</span><span class=p>)</span> <span class=p>-&gt;</span> <span class=n>CGFloat</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>screenWidth</span> <span class=p>=</span> <span class=n>screen</span><span class=p>.</span><span class=n>frame</span><span class=p>.</span><span class=n>width</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// MacBook Pro 14&#34; (3024x1964 nativo, ~1512pt) -&gt; notch ~180pt</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// MacBook Pro 16&#34; (3456x2234 nativo, ~1728pt) -&gt; notch ~204pt</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=n>screenWidth</span> <span class=o>&gt;=</span> <span class=mi>1700</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=mi>204</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=mi>180</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>deinit</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=kd>let</span> <span class=nv>observer</span> <span class=p>=</span> <span class=n>screenObserver</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=n>NotificationCenter</span><span class=p>.</span><span class=k>default</span><span class=p>.</span><span class=n>removeObserver</span><span class=p>(</span><span class=n>observer</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ I valori di larghezza del notch sono empirici. Per una maggiore precisione in produzione, considera di creare una lookup table basata su <code>CGDisplayModelNumber</code> o sulle dimensioni esatte dello schermo.</p></blockquote><h3 id=creazione-della-finestra-overlay-borderless>Creazione della Finestra Overlay Borderless</h3><p>Con la geometria calcolata, creiamo una <code>NSWindow</code> speciale che si sovrappone esattamente al notch. Questa finestra deve essere invisibile al sistema (non appare in Mission Control) ma sempre visibile sopra le altre app.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span><span class=lnt>62
+</span><span class=lnt>63
+</span><span class=lnt>64
+</span><span class=lnt>65
+</span><span class=lnt>66
+</span><span class=lnt>67
+</span><span class=lnt>68
+</span><span class=lnt>69
+</span><span class=lnt>70
+</span><span class=lnt>71
+</span><span class=lnt>72
+</span><span class=lnt>73
+</span><span class=lnt>74
+</span><span class=lnt>75
+</span><span class=lnt>76
+</span><span class=lnt>77
+</span><span class=lnt>78
+</span><span class=lnt>79
+</span><span class=lnt>80
+</span><span class=lnt>81
+</span><span class=lnt>82
+</span><span class=lnt>83
+</span><span class=lnt>84
+</span><span class=lnt>85
+</span><span class=lnt>86
+</span><span class=lnt>87
+</span><span class=lnt>88
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-swift data-lang=swift><span class=line><span class=cl><span class=c1>// NotchOverlayWindow.swift</span>
+</span></span><span class=line><span class=cl><span class=kd>import</span> <span class=nc>AppKit</span>
+</span></span><span class=line><span class=cl><span class=kd>import</span> <span class=nc>Combine</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>/// Finestra borderless che si posiziona sopra il notch</span>
+</span></span><span class=line><span class=cl><span class=kr>final</span> <span class=kd>class</span> <span class=nc>NotchOverlayWindow</span><span class=p>:</span> <span class=n>NSWindow</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>let</span> <span class=nv>geometryEngine</span><span class=p>:</span> <span class=n>NotchGeometryEngine</span>
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>var</span> <span class=nv>geometryCancellable</span><span class=p>:</span> <span class=n>AnyCancellable</span><span class=p>?</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>init</span><span class=p>(</span><span class=n>geometryEngine</span><span class=p>:</span> <span class=n>NotchGeometryEngine</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=kc>self</span><span class=p>.</span><span class=n>geometryEngine</span> <span class=p>=</span> <span class=n>geometryEngine</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=kc>super</span><span class=p>.</span><span class=kd>init</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=n>contentRect</span><span class=p>:</span> <span class=p>.</span><span class=n>zero</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>styleMask</span><span class=p>:</span> <span class=p>[.</span><span class=n>borderless</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>            <span class=n>backing</span><span class=p>:</span> <span class=p>.</span><span class=n>buffered</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=k>defer</span><span class=p>:</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>        <span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=n>configureWindow</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=n>bindToGeometry</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>func</span> <span class=nf>configureWindow</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=kc>self</span><span class=p>.</span><span class=n>level</span> <span class=p>=</span> <span class=p>.</span><span class=n>statusBar</span> <span class=o>+</span> <span class=mi>1</span>
+</span></span><span class=line><span class=cl>        <span class=kc>self</span><span class=p>.</span><span class=n>collectionBehavior</span> <span class=p>=</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>canJoinAllSpaces</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>stationary</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>ignoresCycle</span>
+</span></span><span class=line><span class=cl>        <span class=p>]</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=kc>self</span><span class=p>.</span><span class=n>isOpaque</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>        <span class=kc>self</span><span class=p>.</span><span class=n>backgroundColor</span> <span class=p>=</span> <span class=p>.</span><span class=n>clear</span>
+</span></span><span class=line><span class=cl>        <span class=kc>self</span><span class=p>.</span><span class=n>hasShadow</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>        <span class=kc>self</span><span class=p>.</span><span class=n>ignoresMouseEvents</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>func</span> <span class=nf>bindToGeometry</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>geometryCancellable</span> <span class=p>=</span> <span class=n>geometryEngine</span><span class=p>.</span><span class=err>$</span><span class=n>currentGeometry</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>receive</span><span class=p>(</span><span class=n>on</span><span class=p>:</span> <span class=n>DispatchQueue</span><span class=p>.</span><span class=n>main</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>sink</span> <span class=p>{</span> <span class=p>[</span><span class=kr>weak</span> <span class=kc>self</span><span class=p>]</span> <span class=n>geometry</span> <span class=k>in</span>
+</span></span><span class=line><span class=cl>                <span class=kc>self</span><span class=p>?.</span><span class=n>updateFrame</span><span class=p>(</span><span class=k>for</span><span class=p>:</span> <span class=n>geometry</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>func</span> <span class=nf>updateFrame</span><span class=p>(</span><span class=k>for</span> <span class=n>geometry</span><span class=p>:</span> <span class=n>NotchGeometry</span><span class=p>?)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>guard</span> <span class=kd>let</span> <span class=nv>geometry</span> <span class=p>=</span> <span class=n>geometry</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=kc>self</span><span class=p>.</span><span class=n>orderOut</span><span class=p>(</span><span class=kc>nil</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1>// Espandi il frame oltre il notch per widget laterali</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>expandedFrame</span> <span class=p>=</span> <span class=n>NSRect</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=n>x</span><span class=p>:</span> <span class=n>geometry</span><span class=p>.</span><span class=n>frame</span><span class=p>.</span><span class=n>origin</span><span class=p>.</span><span class=n>x</span> <span class=o>-</span> <span class=mi>100</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>y</span><span class=p>:</span> <span class=n>geometry</span><span class=p>.</span><span class=n>frame</span><span class=p>.</span><span class=n>origin</span><span class=p>.</span><span class=n>y</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>width</span><span class=p>:</span> <span class=n>geometry</span><span class=p>.</span><span class=n>frame</span><span class=p>.</span><span class=n>width</span> <span class=o>+</span> <span class=mi>200</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>height</span><span class=p>:</span> <span class=n>geometry</span><span class=p>.</span><span class=n>frame</span><span class=p>.</span><span class=n>height</span> <span class=o>+</span> <span class=mi>10</span>
+</span></span><span class=line><span class=cl>        <span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=kc>self</span><span class=p>.</span><span class=n>isVisible</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=n>NSAnimationContext</span><span class=p>.</span><span class=n>runAnimationGroup</span> <span class=p>{</span> <span class=n>context</span> <span class=k>in</span>
+</span></span><span class=line><span class=cl>                <span class=n>context</span><span class=p>.</span><span class=n>duration</span> <span class=p>=</span> <span class=mf>0.3</span>
+</span></span><span class=line><span class=cl>                <span class=n>context</span><span class=p>.</span><span class=n>timingFunction</span> <span class=p>=</span> <span class=n>CAMediaTimingFunction</span><span class=p>(</span><span class=n>name</span><span class=p>:</span> <span class=p>.</span><span class=n>easeInEaseOut</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                <span class=kc>self</span><span class=p>.</span><span class=n>animator</span><span class=p>().</span><span class=n>setFrame</span><span class=p>(</span><span class=n>expandedFrame</span><span class=p>,</span> <span class=n>display</span><span class=p>:</span> <span class=kc>true</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=kc>self</span><span class=p>.</span><span class=n>setFrame</span><span class=p>(</span><span class=n>expandedFrame</span><span class=p>,</span> <span class=n>display</span><span class=p>:</span> <span class=kc>true</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=kc>self</span><span class=p>.</span><span class=n>orderFrontRegardless</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kr>override</span> <span class=kd>var</span> <span class=nv>canBecomeKey</span><span class=p>:</span> <span class=nb>Bool</span> <span class=p>{</span> <span class=kc>false</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kr>override</span> <span class=kd>var</span> <span class=nv>canBecomeMain</span><span class=p>:</span> <span class=nb>Bool</span> <span class=p>{</span> <span class=kc>false</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// </span><span class=cs>MARK:</span><span class=c1> - Panel subclass per comportamento NSPanel-like</span>
+</span></span><span class=line><span class=cl><span class=kr>final</span> <span class=kd>class</span> <span class=nc>NotchOverlayPanel</span><span class=p>:</span> <span class=n>NSPanel</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kr>override</span> <span class=kd>var</span> <span class=nv>canBecomeKey</span><span class=p>:</span> <span class=nb>Bool</span> <span class=p>{</span> <span class=kc>false</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kr>override</span> <span class=kd>var</span> <span class=nv>canBecomeMain</span><span class=p>:</span> <span class=nb>Bool</span> <span class=p>{</span> <span class=kc>false</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>/// Permette click-through nelle aree trasparenti</span>
+</span></span><span class=line><span class=cl>    <span class=kr>override</span> <span class=kd>func</span> <span class=nf>isMousePoint</span><span class=p>(</span><span class=kc>_</span> <span class=n>point</span><span class=p>:</span> <span class=n>NSPoint</span><span class=p>,</span> <span class=k>in</span> <span class=n>rect</span><span class=p>:</span> <span class=n>NSRect</span><span class=p>)</span> <span class=p>-&gt;</span> <span class=nb>Bool</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>guard</span> <span class=kd>let</span> <span class=nv>contentView</span> <span class=p>=</span> <span class=kc>self</span><span class=p>.</span><span class=n>contentView</span> <span class=k>else</span> <span class=p>{</span> <span class=k>return</span> <span class=kc>false</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>localPoint</span> <span class=p>=</span> <span class=n>contentView</span><span class=p>.</span><span class=n>convert</span><span class=p>(</span><span class=n>point</span><span class=p>,</span> <span class=n>from</span><span class=p>:</span> <span class=kc>nil</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>contentView</span><span class=p>.</span><span class=n>hitTest</span><span class=p>(</span><span class=n>localPoint</span><span class=p>)</span> <span class=o>!=</span> <span class=kc>nil</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>💡 Usa <code>NSPanel</code> invece di <code>NSWindow</code> se vuoi che l&rsquo;overlay non attivi l&rsquo;app quando cliccato. La subclass <code>NotchOverlayPanel</code> permette click-through sulle aree trasparenti.</p></blockquote><h3 id=sistema-di-widget-modulare-con-registry>Sistema di Widget Modulare con Registry</h3><p>Ora costruiamo l&rsquo;architettura per widget intercambiabili. Ogni widget implementa un protocollo comune e viene registrato in un registry centrale che gestisce lifecycle e layout.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt>  1
+</span><span class=lnt>  2
+</span><span class=lnt>  3
+</span><span class=lnt>  4
+</span><span class=lnt>  5
+</span><span class=lnt>  6
+</span><span class=lnt>  7
+</span><span class=lnt>  8
+</span><span class=lnt>  9
+</span><span class=lnt> 10
+</span><span class=lnt> 11
+</span><span class=lnt> 12
+</span><span class=lnt> 13
+</span><span class=lnt> 14
+</span><span class=lnt> 15
+</span><span class=lnt> 16
+</span><span class=lnt> 17
+</span><span class=lnt> 18
+</span><span class=lnt> 19
+</span><span class=lnt> 20
+</span><span class=lnt> 21
+</span><span class=lnt> 22
+</span><span class=lnt> 23
+</span><span class=lnt> 24
+</span><span class=lnt> 25
+</span><span class=lnt> 26
+</span><span class=lnt> 27
+</span><span class=lnt> 28
+</span><span class=lnt> 29
+</span><span class=lnt> 30
+</span><span class=lnt> 31
+</span><span class=lnt> 32
+</span><span class=lnt> 33
+</span><span class=lnt> 34
+</span><span class=lnt> 35
+</span><span class=lnt> 36
+</span><span class=lnt> 37
+</span><span class=lnt> 38
+</span><span class=lnt> 39
+</span><span class=lnt> 40
+</span><span class=lnt> 41
+</span><span class=lnt> 42
+</span><span class=lnt> 43
+</span><span class=lnt> 44
+</span><span class=lnt> 45
+</span><span class=lnt> 46
+</span><span class=lnt> 47
+</span><span class=lnt> 48
+</span><span class=lnt> 49
+</span><span class=lnt> 50
+</span><span class=lnt> 51
+</span><span class=lnt> 52
+</span><span class=lnt> 53
+</span><span class=lnt> 54
+</span><span class=lnt> 55
+</span><span class=lnt> 56
+</span><span class=lnt> 57
+</span><span class=lnt> 58
+</span><span class=lnt> 59
+</span><span class=lnt> 60
+</span><span class=lnt> 61
+</span><span class=lnt> 62
+</span><span class=lnt> 63
+</span><span class=lnt> 64
+</span><span class=lnt> 65
+</span><span class=lnt> 66
+</span><span class=lnt> 67
+</span><span class=lnt> 68
+</span><span class=lnt> 69
+</span><span class=lnt> 70
+</span><span class=lnt> 71
+</span><span class=lnt> 72
+</span><span class=lnt> 73
+</span><span class=lnt> 74
+</span><span class=lnt> 75
+</span><span class=lnt> 76
+</span><span class=lnt> 77
+</span><span class=lnt> 78
+</span><span class=lnt> 79
+</span><span class=lnt> 80
+</span><span class=lnt> 81
+</span><span class=lnt> 82
+</span><span class=lnt> 83
+</span><span class=lnt> 84
+</span><span class=lnt> 85
+</span><span class=lnt> 86
+</span><span class=lnt> 87
+</span><span class=lnt> 88
+</span><span class=lnt> 89
+</span><span class=lnt> 90
+</span><span class=lnt> 91
+</span><span class=lnt> 92
+</span><span class=lnt> 93
+</span><span class=lnt> 94
+</span><span class=lnt> 95
+</span><span class=lnt> 96
+</span><span class=lnt> 97
+</span><span class=lnt> 98
+</span><span class=lnt> 99
+</span><span class=lnt>100
+</span><span class=lnt>101
+</span><span class=lnt>102
+</span><span class=lnt>103
+</span><span class=lnt>104
+</span><span class=lnt>105
+</span><span class=lnt>106
+</span><span class=lnt>107
+</span><span class=lnt>108
+</span><span class=lnt>109
+</span><span class=lnt>110
+</span><span class=lnt>111
+</span><span class=lnt>112
+</span><span class=lnt>113
+</span><span class=lnt>114
+</span><span class=lnt>115
+</span><span class=lnt>116
+</span><span class=lnt>117
+</span><span class=lnt>118
+</span><span class=lnt>119
+</span><span class=lnt>120
+</span><span class=lnt>121
+</span><span class=lnt>122
+</span><span class=lnt>123
+</span><span class=lnt>124
+</span><span class=lnt>125
+</span><span class=lnt>126
+</span><span class=lnt>127
+</span><span class=lnt>128
+</span><span class=lnt>129
+</span><span class=lnt>130
+</span><span class=lnt>131
+</span><span class=lnt>132
+</span><span class=lnt>133
+</span><span class=lnt>134
+</span><span class=lnt>135
+</span><span class=lnt>136
+</span><span class=lnt>137
+</span><span class=lnt>138
+</span><span class=lnt>139
+</span><span class=lnt>140
+</span><span class=lnt>141
+</span><span class=lnt>142
+</span><span class=lnt>143
+</span><span class=lnt>144
+</span><span class=lnt>145
+</span><span class=lnt>146
+</span><span class=lnt>147
+</span><span class=lnt>148
+</span><span class=lnt>149
+</span><span class=lnt>150
+</span><span class=lnt>151
+</span><span class=lnt>152
+</span><span class=lnt>153
+</span><span class=lnt>154
+</span><span class=lnt>155
+</span><span class=lnt>156
+</span><span class=lnt>157
+</span><span class=lnt>158
+</span><span class=lnt>159
+</span><span class=lnt>160
+</span><span class=lnt>161
+</span><span class=lnt>162
+</span><span class=lnt>163
+</span><span class=lnt>164
+</span><span class=lnt>165
+</span><span class=lnt>166
+</span><span class=lnt>167
+</span><span class=lnt>168
+</span><span class=lnt>169
+</span><span class=lnt>170
+</span><span class=lnt>171
+</span><span class=lnt>172
+</span><span class=lnt>173
+</span><span class=lnt>174
+</span><span class=lnt>175
+</span><span class=lnt>176
+</span><span class=lnt>177
+</span><span class=lnt>178
+</span><span class=lnt>179
+</span><span class=lnt>180
+</span><span class=lnt>181
+</span><span class=lnt>182
+</span><span class=lnt>183
+</span><span class=lnt>184
+</span><span class=lnt>185
+</span><span class=lnt>186
+</span><span class=lnt>187
+</span><span class=lnt>188
+</span><span class=lnt>189
+</span><span class=lnt>190
+</span><span class=lnt>191
+</span><span class=lnt>192
+</span><span class=lnt>193
+</span><span class=lnt>194
+</span><span class=lnt>195
+</span><span class=lnt>196
+</span><span class=lnt>197
+</span><span class=lnt>198
+</span><span class=lnt>199
+</span><span class=lnt>200
+</span><span class=lnt>201
+</span><span class=lnt>202
+</span><span class=lnt>203
+</span><span class=lnt>204
+</span><span class=lnt>205
+</span><span class=lnt>206
+</span><span class=lnt>207
+</span><span class=lnt>208
+</span><span class=lnt>209
+</span><span class=lnt>210
+</span><span class=lnt>211
+</span><span class=lnt>212
+</span><span class=lnt>213
+</span><span class=lnt>214
+</span><span class=lnt>215
+</span><span class=lnt>216
+</span><span class=lnt>217
+</span><span class=lnt>218
+</span><span class=lnt>219
+</span><span class=lnt>220
+</span><span class=lnt>221
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-swift data-lang=swift><span class=line><span class=cl><span class=c1>// WidgetProtocol.swift</span>
+</span></span><span class=line><span class=cl><span class=kd>import</span> <span class=nc>AppKit</span>
+</span></span><span class=line><span class=cl><span class=kd>import</span> <span class=nc>Combine</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>/// Posizione del widget rispetto al notch</span>
+</span></span><span class=line><span class=cl><span class=kd>enum</span> <span class=nc>WidgetPosition</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>case</span> <span class=kr>left</span>
+</span></span><span class=line><span class=cl>    <span class=k>case</span> <span class=kr>right</span>
+</span></span><span class=line><span class=cl>    <span class=k>case</span> <span class=n>overlay</span>   <span class=c1>// Sopra/dentro il notch (espande al hover)</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>/// Priorità per risoluzione conflitti di spazio</span>
+</span></span><span class=line><span class=cl><span class=kd>enum</span> <span class=nc>WidgetPriority</span><span class=p>:</span> <span class=nb>Int</span><span class=p>,</span> <span class=nb>Comparable</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>case</span> <span class=n>low</span> <span class=p>=</span> <span class=mi>0</span>
+</span></span><span class=line><span class=cl>    <span class=k>case</span> <span class=n>normal</span> <span class=p>=</span> <span class=mi>50</span>
+</span></span><span class=line><span class=cl>    <span class=k>case</span> <span class=n>high</span> <span class=p>=</span> <span class=mi>100</span>
+</span></span><span class=line><span class=cl>    <span class=k>case</span> <span class=n>critical</span> <span class=p>=</span> <span class=mi>200</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>static</span> <span class=kd>func</span> <span class=o>&lt;</span> <span class=p>(</span><span class=n>lhs</span><span class=p>:</span> <span class=n>WidgetPriority</span><span class=p>,</span> <span class=n>rhs</span><span class=p>:</span> <span class=n>WidgetPriority</span><span class=p>)</span> <span class=p>-&gt;</span> <span class=nb>Bool</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>lhs</span><span class=p>.</span><span class=n>rawValue</span> <span class=o>&lt;</span> <span class=n>rhs</span><span class=p>.</span><span class=n>rawValue</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>/// Protocollo base per tutti i widget Notchy</span>
+</span></span><span class=line><span class=cl><span class=kd>protocol</span> <span class=nc>NotchWidget</span><span class=p>:</span> <span class=nb>AnyObject</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>identifier</span><span class=p>:</span> <span class=nb>String</span> <span class=p>{</span> <span class=kr>get</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>preferredPosition</span><span class=p>:</span> <span class=n>WidgetPosition</span> <span class=p>{</span> <span class=kr>get</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>priority</span><span class=p>:</span> <span class=n>WidgetPriority</span> <span class=p>{</span> <span class=kr>get</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>requiredWidth</span><span class=p>:</span> <span class=n>CGFloat</span> <span class=p>{</span> <span class=kr>get</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>view</span><span class=p>:</span> <span class=n>NSView</span> <span class=p>{</span> <span class=kr>get</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>updatePublisher</span><span class=p>:</span> <span class=n>AnyPublisher</span><span class=p>&lt;</span><span class=nb>Void</span><span class=p>,</span> <span class=n>Never</span><span class=p>&gt;</span> <span class=p>{</span> <span class=kr>get</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>activate</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>deactivate</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>handleHover</span><span class=p>(</span><span class=kc>_</span> <span class=n>isHovering</span><span class=p>:</span> <span class=nb>Bool</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// </span><span class=cs>MARK:</span><span class=c1> - Widget Registry</span>
+</span></span><span class=line><span class=cl><span class=kr>final</span> <span class=kd>class</span> <span class=nc>WidgetRegistry</span><span class=p>:</span> <span class=n>ObservableObject</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=p>@</span><span class=n>Published</span> <span class=kd>private</span><span class=p>(</span><span class=kr>set</span><span class=p>)</span> <span class=kd>var</span> <span class=nv>activeWidgets</span><span class=p>:</span> <span class=p>[</span><span class=n>NotchWidget</span><span class=p>]</span> <span class=p>=</span> <span class=p>[]</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>var</span> <span class=nv>registeredWidgets</span><span class=p>:</span> <span class=p>[</span><span class=nb>String</span><span class=p>:</span> <span class=n>NotchWidget</span><span class=p>]</span> <span class=p>=</span> <span class=p>[:]</span>
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>var</span> <span class=nv>cancellables</span> <span class=p>=</span> <span class=n>Set</span><span class=p>&lt;</span><span class=n>AnyCancellable</span><span class=p>&gt;()</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>register</span><span class=p>(</span><span class=kc>_</span> <span class=n>widget</span><span class=p>:</span> <span class=n>NotchWidget</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>guard</span> <span class=n>registeredWidgets</span><span class=p>[</span><span class=n>widget</span><span class=p>.</span><span class=n>identifier</span><span class=p>]</span> <span class=p>==</span> <span class=kc>nil</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=bp>print</span><span class=p>(</span><span class=s>&#34;⚠️ Widget </span><span class=si>\(</span><span class=n>widget</span><span class=p>.</span><span class=n>identifier</span><span class=si>)</span><span class=s> già registrato&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=n>registeredWidgets</span><span class=p>[</span><span class=n>widget</span><span class=p>.</span><span class=n>identifier</span><span class=p>]</span> <span class=p>=</span> <span class=n>widget</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=n>widget</span><span class=p>.</span><span class=n>updatePublisher</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>sink</span> <span class=p>{</span> <span class=p>[</span><span class=kr>weak</span> <span class=kc>self</span><span class=p>]</span> <span class=k>in</span>
+</span></span><span class=line><span class=cl>                <span class=kc>self</span><span class=p>?.</span><span class=n>objectWillChange</span><span class=p>.</span><span class=n>send</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=n>store</span><span class=p>(</span><span class=k>in</span><span class=p>:</span> <span class=p>&amp;</span><span class=n>cancellables</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=n>rebuildActiveList</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>unregister</span><span class=p>(</span><span class=n>identifier</span><span class=p>:</span> <span class=nb>String</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>guard</span> <span class=kd>let</span> <span class=nv>widget</span> <span class=p>=</span> <span class=n>registeredWidgets</span><span class=p>.</span><span class=n>removeValue</span><span class=p>(</span><span class=n>forKey</span><span class=p>:</span> <span class=n>identifier</span><span class=p>)</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=n>widget</span><span class=p>.</span><span class=n>deactivate</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=n>rebuildActiveList</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>setActive</span><span class=p>(</span><span class=kc>_</span> <span class=n>active</span><span class=p>:</span> <span class=nb>Bool</span><span class=p>,</span> <span class=k>for</span> <span class=n>identifier</span><span class=p>:</span> <span class=nb>String</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>guard</span> <span class=kd>let</span> <span class=nv>widget</span> <span class=p>=</span> <span class=n>registeredWidgets</span><span class=p>[</span><span class=n>identifier</span><span class=p>]</span> <span class=k>else</span> <span class=p>{</span> <span class=k>return</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=n>active</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=n>widget</span><span class=p>.</span><span class=n>activate</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=o>!</span><span class=n>activeWidgets</span><span class=p>.</span><span class=bp>contains</span><span class=p>(</span><span class=k>where</span><span class=p>:</span> <span class=p>{</span> <span class=nv>$0</span><span class=p>.</span><span class=n>identifier</span> <span class=p>==</span> <span class=n>identifier</span> <span class=p>})</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>                <span class=n>activeWidgets</span><span class=p>.</span><span class=n>append</span><span class=p>(</span><span class=n>widget</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                <span class=n>activeWidgets</span><span class=p>.</span><span class=bp>sort</span> <span class=p>{</span> <span class=nv>$0</span><span class=p>.</span><span class=n>priority</span> <span class=o>&gt;</span> <span class=nv>$1</span><span class=p>.</span><span class=n>priority</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=n>widget</span><span class=p>.</span><span class=n>deactivate</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>            <span class=n>activeWidgets</span><span class=p>.</span><span class=bp>removeAll</span> <span class=p>{</span> <span class=nv>$0</span><span class=p>.</span><span class=n>identifier</span> <span class=p>==</span> <span class=n>identifier</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>widgets</span><span class=p>(</span><span class=k>for</span> <span class=n>position</span><span class=p>:</span> <span class=n>WidgetPosition</span><span class=p>)</span> <span class=p>-&gt;</span> <span class=p>[</span><span class=n>NotchWidget</span><span class=p>]</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>activeWidgets</span><span class=p>.</span><span class=bp>filter</span> <span class=p>{</span> <span class=nv>$0</span><span class=p>.</span><span class=n>preferredPosition</span> <span class=p>==</span> <span class=n>position</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>func</span> <span class=nf>rebuildActiveList</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>activeWidgets</span> <span class=p>=</span> <span class=n>registeredWidgets</span><span class=p>.</span><span class=n>values</span>
+</span></span><span class=line><span class=cl>            <span class=p>.</span><span class=bp>sorted</span> <span class=p>{</span> <span class=nv>$0</span><span class=p>.</span><span class=n>priority</span> <span class=o>&gt;</span> <span class=nv>$1</span><span class=p>.</span><span class=n>priority</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// </span><span class=cs>MARK:</span><span class=c1> - Esempio: Build Status Widget</span>
+</span></span><span class=line><span class=cl><span class=kr>final</span> <span class=kd>class</span> <span class=nc>BuildStatusWidget</span><span class=p>:</span> <span class=n>NotchWidget</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kd>let</span> <span class=nv>identifier</span> <span class=p>=</span> <span class=s>&#34;com.notchy.buildstatus&#34;</span>
+</span></span><span class=line><span class=cl>    <span class=kd>let</span> <span class=nv>preferredPosition</span><span class=p>:</span> <span class=n>WidgetPosition</span> <span class=p>=</span> <span class=p>.</span><span class=kr>left</span>
+</span></span><span class=line><span class=cl>    <span class=kd>let</span> <span class=nv>priority</span><span class=p>:</span> <span class=n>WidgetPriority</span> <span class=p>=</span> <span class=p>.</span><span class=n>high</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>requiredWidth</span><span class=p>:</span> <span class=n>CGFloat</span> <span class=p>{</span> <span class=n>isExpanded</span> <span class=p>?</span> <span class=mi>200</span> <span class=p>:</span> <span class=mi>80</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>let</span> <span class=nv>_view</span><span class=p>:</span> <span class=n>BuildStatusView</span>
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>view</span><span class=p>:</span> <span class=n>NSView</span> <span class=p>{</span> <span class=n>_view</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>let</span> <span class=nv>updateSubject</span> <span class=p>=</span> <span class=n>PassthroughSubject</span><span class=p>&lt;</span><span class=nb>Void</span><span class=p>,</span> <span class=n>Never</span><span class=p>&gt;()</span>
+</span></span><span class=line><span class=cl>    <span class=kd>var</span> <span class=nv>updatePublisher</span><span class=p>:</span> <span class=n>AnyPublisher</span><span class=p>&lt;</span><span class=nb>Void</span><span class=p>,</span> <span class=n>Never</span><span class=p>&gt;</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>updateSubject</span><span class=p>.</span><span class=n>eraseToAnyPublisher</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=p>@</span><span class=n>Published</span> <span class=kd>private</span><span class=p>(</span><span class=kr>set</span><span class=p>)</span> <span class=kd>var</span> <span class=nv>buildState</span><span class=p>:</span> <span class=n>BuildState</span> <span class=p>=</span> <span class=p>.</span><span class=n>idle</span>
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>var</span> <span class=nv>isExpanded</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>enum</span> <span class=nc>BuildState</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=n>idle</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=n>building</span><span class=p>(</span><span class=n>progress</span><span class=p>:</span> <span class=nb>Double</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=n>success</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=n>failed</span><span class=p>(</span><span class=n>error</span><span class=p>:</span> <span class=nb>String</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=kd>var</span> <span class=nv>color</span><span class=p>:</span> <span class=n>NSColor</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>switch</span> <span class=kc>self</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>case</span> <span class=p>.</span><span class=n>idle</span><span class=p>:</span> <span class=k>return</span> <span class=p>.</span><span class=n>systemGray</span>
+</span></span><span class=line><span class=cl>            <span class=k>case</span> <span class=p>.</span><span class=n>building</span><span class=p>:</span> <span class=k>return</span> <span class=p>.</span><span class=n>systemBlue</span>
+</span></span><span class=line><span class=cl>            <span class=k>case</span> <span class=p>.</span><span class=n>success</span><span class=p>:</span> <span class=k>return</span> <span class=p>.</span><span class=n>systemGreen</span>
+</span></span><span class=line><span class=cl>            <span class=k>case</span> <span class=p>.</span><span class=n>failed</span><span class=p>:</span> <span class=k>return</span> <span class=p>.</span><span class=n>systemRed</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>init</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>_view</span> <span class=p>=</span> <span class=n>BuildStatusView</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=n>_view</span><span class=p>.</span><span class=n>widget</span> <span class=p>=</span> <span class=kc>self</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>activate</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>startMonitoring</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>deactivate</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>stopMonitoring</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>handleHover</span><span class=p>(</span><span class=kc>_</span> <span class=n>isHovering</span><span class=p>:</span> <span class=nb>Bool</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>isExpanded</span> <span class=p>=</span> <span class=n>isHovering</span>
+</span></span><span class=line><span class=cl>        <span class=n>updateSubject</span><span class=p>.</span><span class=n>send</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>func</span> <span class=nf>startMonitoring</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// In produzione: usa XCBBuildService o webhook CI</span>
+</span></span><span class=line><span class=cl>        <span class=bp>print</span><span class=p>(</span><span class=s>&#34;📊 Build monitoring attivato&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>func</span> <span class=nf>stopMonitoring</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=bp>print</span><span class=p>(</span><span class=s>&#34;📊 Build monitoring disattivato&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>updateState</span><span class=p>(</span><span class=kc>_</span> <span class=n>newState</span><span class=p>:</span> <span class=n>BuildState</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>buildState</span> <span class=p>=</span> <span class=n>newState</span>
+</span></span><span class=line><span class=cl>        <span class=n>updateSubject</span><span class=p>.</span><span class=n>send</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>// </span><span class=cs>MARK:</span><span class=c1> - Vista per BuildStatusWidget</span>
+</span></span><span class=line><span class=cl><span class=kr>final</span> <span class=kd>class</span> <span class=nc>BuildStatusView</span><span class=p>:</span> <span class=n>NSView</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=kr>weak</span> <span class=kd>var</span> <span class=nv>widget</span><span class=p>:</span> <span class=n>BuildStatusWidget</span><span class=p>?</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>let</span> <span class=nv>indicator</span> <span class=p>=</span> <span class=n>NSView</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>let</span> <span class=nv>label</span> <span class=p>=</span> <span class=n>NSTextField</span><span class=p>(</span><span class=n>labelWithString</span><span class=p>:</span> <span class=s>&#34;&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kr>override</span> <span class=kd>init</span><span class=p>(</span><span class=n>frame</span><span class=p>:</span> <span class=n>NSRect</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=kc>super</span><span class=p>.</span><span class=kd>init</span><span class=p>(</span><span class=n>frame</span><span class=p>:</span> <span class=n>frame</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=n>setupUI</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kr>required</span> <span class=kd>init</span><span class=p>?(</span><span class=n>coder</span><span class=p>:</span> <span class=n>NSCoder</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=kc>super</span><span class=p>.</span><span class=kd>init</span><span class=p>(</span><span class=n>coder</span><span class=p>:</span> <span class=n>coder</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=n>setupUI</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>func</span> <span class=nf>setupUI</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>wantsLayer</span> <span class=p>=</span> <span class=kc>true</span>
+</span></span><span class=line><span class=cl>        <span class=n>layer</span><span class=p>?.</span><span class=n>cornerRadius</span> <span class=p>=</span> <span class=mi>8</span>
+</span></span><span class=line><span class=cl>        <span class=n>layer</span><span class=p>?.</span><span class=n>backgroundColor</span> <span class=p>=</span> <span class=n>NSColor</span><span class=p>.</span><span class=n>black</span><span class=p>.</span><span class=n>withAlphaComponent</span><span class=p>(</span><span class=mf>0.7</span><span class=p>).</span><span class=n>cgColor</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=n>indicator</span><span class=p>.</span><span class=n>wantsLayer</span> <span class=p>=</span> <span class=kc>true</span>
+</span></span><span class=line><span class=cl>        <span class=n>indicator</span><span class=p>.</span><span class=n>layer</span><span class=p>?.</span><span class=n>cornerRadius</span> <span class=p>=</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>        <span class=n>indicator</span><span class=p>.</span><span class=n>translatesAutoresizingMaskIntoConstraints</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>        <span class=n>addSubview</span><span class=p>(</span><span class=n>indicator</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=n>label</span><span class=p>.</span><span class=n>font</span> <span class=p>=</span> <span class=p>.</span><span class=n>systemFont</span><span class=p>(</span><span class=n>ofSize</span><span class=p>:</span> <span class=mi>10</span><span class=p>,</span> <span class=n>weight</span><span class=p>:</span> <span class=p>.</span><span class=n>medium</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=n>label</span><span class=p>.</span><span class=n>textColor</span> <span class=p>=</span> <span class=p>.</span><span class=n>white</span>
+</span></span><span class=line><span class=cl>        <span class=n>label</span><span class=p>.</span><span class=n>translatesAutoresizingMaskIntoConstraints</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>        <span class=n>addSubview</span><span class=p>(</span><span class=n>label</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=n>NSLayoutConstraint</span><span class=p>.</span><span class=n>activate</span><span class=p>([</span>
+</span></span><span class=line><span class=cl>            <span class=n>indicator</span><span class=p>.</span><span class=n>leadingAnchor</span><span class=p>.</span><span class=n>constraint</span><span class=p>(</span><span class=n>equalTo</span><span class=p>:</span> <span class=n>leadingAnchor</span><span class=p>,</span> <span class=n>constant</span><span class=p>:</span> <span class=mi>8</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=n>indicator</span><span class=p>.</span><span class=n>centerYAnchor</span><span class=p>.</span><span class=n>constraint</span><span class=p>(</span><span class=n>equalTo</span><span class=p>:</span> <span class=n>centerYAnchor</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=n>indicator</span><span class=p>.</span><span class=n>widthAnchor</span><span class=p>.</span><span class=n>constraint</span><span class=p>(</span><span class=n>equalToConstant</span><span class=p>:</span> <span class=mi>8</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=n>indicator</span><span class=p>.</span><span class=n>heightAnchor</span><span class=p>.</span><span class=n>constraint</span><span class=p>(</span><span class=n>equalToConstant</span><span class=p>:</span> <span class=mi>8</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>            <span class=n>label</span><span class=p>.</span><span class=n>leadingAnchor</span><span class=p>.</span><span class=n>constraint</span><span class=p>(</span><span class=n>equalTo</span><span class=p>:</span> <span class=n>indicator</span><span class=p>.</span><span class=n>trailingAnchor</span><span class=p>,</span> <span class=n>constant</span><span class=p>:</span> <span class=mi>6</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=n>label</span><span class=p>.</span><span class=n>centerYAnchor</span><span class=p>.</span><span class=n>constraint</span><span class=p>(</span><span class=n>equalTo</span><span class=p>:</span> <span class=n>centerYAnchor</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>            <span class=n>label</span><span class=p>.</span><span class=n>trailingAnchor</span><span class=p>.</span><span class=n>constraint</span><span class=p>(</span><span class=n>lessThanOrEqualTo</span><span class=p>:</span> <span class=n>trailingAnchor</span><span class=p>,</span> <span class=n>constant</span><span class=p>:</span> <span class=o>-</span><span class=mi>8</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=p>])</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>func</span> <span class=nf>update</span><span class=p>(</span><span class=k>for</span> <span class=n>state</span><span class=p>:</span> <span class=n>BuildStatusWidget</span><span class=p>.</span><span class=n>BuildState</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>indicator</span><span class=p>.</span><span class=n>layer</span><span class=p>?.</span><span class=n>backgroundColor</span> <span class=p>=</span> <span class=n>state</span><span class=p>.</span><span class=n>color</span><span class=p>.</span><span class=n>cgColor</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>switch</span> <span class=n>state</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=p>.</span><span class=n>idle</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>label</span><span class=p>.</span><span class=n>stringValue</span> <span class=p>=</span> <span class=s>&#34;Idle&#34;</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=p>.</span><span class=n>building</span><span class=p>(</span><span class=kd>let</span> <span class=nv>progress</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>            <span class=n>label</span><span class=p>.</span><span class=n>stringValue</span> <span class=p>=</span> <span class=s>&#34;Building </span><span class=si>\(</span><span class=nb>Int</span><span class=si>(</span><span class=n>progress</span> <span class=o>*</span> <span class=mi>100</span><span class=si>))</span><span class=s>%&#34;</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=p>.</span><span class=n>success</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>label</span><span class=p>.</span><span class=n>stringValue</span> <span class=p>=</span> <span class=s>&#34;✓ Success&#34;</span>
+</span></span><span class=line><span class=cl>        <span class=k>case</span> <span class=p>.</span><span class=n>failed</span><span class=p>(</span><span class=kd>let</span> <span class=nv>error</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>            <span class=n>label</span><span class=p>.</span><span class=n>stringValue</span> <span class=p>=</span> <span class=s>&#34;✗ </span><span class=si>\(</span><span class=n>error</span><span class=si>)</span><span class=s>&#34;</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>📝 Il <code>WidgetRegistry</code> usa il pattern Observer con Combine. Puoi connettere <code>updatePublisher</code> ai tuoi data stream esistenti per aggiornamenti in tempo reale.</p></blockquote><h2 id=configurazione-per-produzione>Configurazione per Produzione</h2><p>Per distribuire Notchy in produzione, serve una configurazione robusta che gestisca correttamente il sandboxing macOS, le entitlements e il code signing.</p><h3 id=entitlements-e-infoplist>Entitlements e Info.plist</h3><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-xml data-lang=xml><span class=line><span class=cl><span class=c>&lt;!-- Notchy.entitlements --&gt;</span>
+</span></span><span class=line><span class=cl><span class=cp>&lt;?xml version=&#34;1.0&#34; encoding=&#34;UTF-8&#34;?&gt;</span>
+</span></span><span class=line><span class=cl><span class=cp>&lt;!DOCTYPE plist PUBLIC &#34;-//Apple//DTD PLIST 1.0//EN&#34; &#34;http://www.apple.com/DTDs/PropertyList-1.0.dtd&#34;&gt;</span>
+</span></span><span class=line><span class=cl><span class=nt>&lt;plist</span> <span class=na>version=</span><span class=s>&#34;1.0&#34;</span><span class=nt>&gt;</span>
+</span></span><span class=line><span class=cl><span class=nt>&lt;dict&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=c>&lt;!-- Accesso alla window list per posizionamento sopra altre app --&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=nt>&lt;key&gt;</span>com.apple.security.temporary-exception.mach-lookup.global-name<span class=nt>&lt;/key&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=nt>&lt;array&gt;</span>
+</span></span><span class=line><span class=cl>        <span class=nt>&lt;string&gt;</span>com.apple.windowserver.active<span class=nt>&lt;/string&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=nt>&lt;/array&gt;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c>&lt;!-- Necessario per overlay a livello di sistema --&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=nt>&lt;key&gt;</span>com.apple.security.app-sandbox<span class=nt>&lt;/key&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=nt>&lt;false/&gt;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c>&lt;!-- Accessibility per interazioni avanzate --&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=nt>&lt;key&gt;</span>com.apple.security.automation.apple-events<span class=nt>&lt;/key&gt;</span>
+</span></span><span class=line><span class=cl>    <span class=nt>&lt;true/&gt;</span>
+</span></span><span class=line><span class=cl><span class=nt>&lt;/dict&gt;</span>
+</span></span><span class=line><span class=cl><span class=nt>&lt;/plist&gt;</span>
+</span></span></code></pre></td></tr></table></div></div><blockquote><p>⚠️ Disabilitare il sandbox (<code>app-sandbox = false</code>) impedisce la distribuzione su Mac App Store. Per lo Store, usa un&rsquo;app helper non-sandboxed con XPC.</p></blockquote><h3 id=configuration-manager>Configuration Manager</h3><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre tabindex=0 class=chroma><code><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=lnt>24
+</span><span class=lnt>25
+</span><span class=lnt>26
+</span><span class=lnt>27
+</span><span class=lnt>28
+</span><span class=lnt>29
+</span><span class=lnt>30
+</span><span class=lnt>31
+</span><span class=lnt>32
+</span><span class=lnt>33
+</span><span class=lnt>34
+</span><span class=lnt>35
+</span><span class=lnt>36
+</span><span class=lnt>37
+</span><span class=lnt>38
+</span><span class=lnt>39
+</span><span class=lnt>40
+</span><span class=lnt>41
+</span><span class=lnt>42
+</span><span class=lnt>43
+</span><span class=lnt>44
+</span><span class=lnt>45
+</span><span class=lnt>46
+</span><span class=lnt>47
+</span><span class=lnt>48
+</span><span class=lnt>49
+</span><span class=lnt>50
+</span><span class=lnt>51
+</span><span class=lnt>52
+</span><span class=lnt>53
+</span><span class=lnt>54
+</span><span class=lnt>55
+</span><span class=lnt>56
+</span><span class=lnt>57
+</span><span class=lnt>58
+</span><span class=lnt>59
+</span><span class=lnt>60
+</span><span class=lnt>61
+</span></code></pre></td><td class=lntd><pre tabindex=0 class=chroma><code class=language-swift data-lang=swift><span class=line><span class=cl><span class=c1>// NotchyConfiguration.swift</span>
+</span></span><span class=line><span class=cl><span class=kd>import</span> <span class=nc>Foundation</span>
+</span></span><span class=line><span class=cl><span class=kd>import</span> <span class=nc>os</span><span class=p>.</span><span class=nc>log</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1>/// Configurazione centralizzata per deployment in produzione</span>
+</span></span><span class=line><span class=cl><span class=kd>public</span> <span class=kd>struct</span> <span class=nc>NotchyConfiguration</span><span class=p>:</span> <span class=n>Codable</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// </span><span class=cs>MARK:</span><span class=c1> - Impostazioni UI</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>animationDuration</span><span class=p>:</span> <span class=n>TimeInterval</span> <span class=p>=</span> <span class=mf>0.3</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>maxExpandedHeight</span><span class=p>:</span> <span class=n>CGFloat</span> <span class=p>=</span> <span class=mi>200</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>cornerRadius</span><span class=p>:</span> <span class=n>CGFloat</span> <span class=p>=</span> <span class=mi>22</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>blurIntensity</span><span class=p>:</span> <span class=n>CGFloat</span> <span class=p>=</span> <span class=mf>0.85</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// </span><span class=cs>MARK:</span><span class=c1> - Comportamento</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>autoCollapseDelay</span><span class=p>:</span> <span class=n>TimeInterval</span> <span class=p>=</span> <span class=mf>5.0</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>enableHaptics</span><span class=p>:</span> <span class=nb>Bool</span> <span class=p>=</span> <span class=kc>true</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>respectDoNotDisturb</span><span class=p>:</span> <span class=nb>Bool</span> <span class=p>=</span> <span class=kc>true</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// </span><span class=cs>MARK:</span><span class=c1> - Performance</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>maxConcurrentAnimations</span><span class=p>:</span> <span class=nb>Int</span> <span class=p>=</span> <span class=mi>3</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>enableMetalRendering</span><span class=p>:</span> <span class=nb>Bool</span> <span class=p>=</span> <span class=kc>true</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>frameRateLimit</span><span class=p>:</span> <span class=nb>Int</span> <span class=p>=</span> <span class=mi>120</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1>// </span><span class=cs>MARK:</span><span class=c1> - Debug (disabilitare in produzione)</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>debugOverlayEnabled</span><span class=p>:</span> <span class=nb>Bool</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>var</span> <span class=nv>verboseLogging</span><span class=p>:</span> <span class=nb>Bool</span> <span class=p>=</span> <span class=kc>false</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>static</span> <span class=kd>var</span> <span class=nv>shared</span><span class=p>:</span> <span class=n>NotchyConfiguration</span> <span class=p>=</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=n>loadFromDisk</span><span class=p>()</span> <span class=p>??</span> <span class=n>NotchyConfiguration</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=p>}()</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>static</span> <span class=kd>let</span> <span class=nv>configURL</span><span class=p>:</span> <span class=n>URL</span> <span class=p>=</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>appSupport</span> <span class=p>=</span> <span class=n>FileManager</span><span class=p>.</span><span class=k>default</span><span class=p>.</span><span class=n>urls</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=k>for</span><span class=p>:</span> <span class=p>.</span><span class=n>applicationSupportDirectory</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=k>in</span><span class=p>:</span> <span class=p>.</span><span class=n>userDomainMask</span>
+</span></span><span class=line><span class=cl>        <span class=p>).</span><span class=bp>first</span><span class=p>!</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>notchyDir</span> <span class=p>=</span> <span class=n>appSupport</span><span class=p>.</span><span class=n>appendingPathComponent</span><span class=p>(</span><span class=s>&#34;Notchy&#34;</span><span class=p>,</span> <span class=n>isDirectory</span><span class=p>:</span> <span class=kc>true</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>?</span> <span class=n>FileManager</span><span class=p>.</span><span class=k>default</span><span class=p>.</span><span class=n>createDirectory</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=n>at</span><span class=p>:</span> <span class=n>notchyDir</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=n>withIntermediateDirectories</span><span class=p>:</span> <span class=kc>true</span>
+</span></span><span class=line><span class=cl>        <span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>notchyDir</span><span class=p>.</span><span class=n>appendingPathComponent</span><span class=p>(</span><span class=s>&#34;config.json&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=p>}()</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>private</span> <span class=kd>static</span> <span class=kd>func</span> <span class=nf>loadFromDisk</span><span class=p>()</span> <span class=p>-&gt;</span> <span class=n>NotchyConfiguration</span><span class=p>?</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=k>guard</span> <span class=kd>let</span> <span class=nv>data</span> <span class=p>=</span> <span class=k>try</span><span class=p>?</span> <span class=n>Data</span><span class=p>(</span><span class=n>contentsOf</span><span class=p>:</span> <span class=n>configURL</span><span class=p>)</span> <span class=k>else</span> <span class=p>{</span> <span class=k>return</span> <span class=kc>nil</span> <span class=p>}</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>do</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=k>try</span> <span class=n>JSONDecoder</span><span class=p>().</span><span class=n>decode</span><span class=p>(</span><span class=n>NotchyConfiguration</span><span class=p>.</span><span class=kc>self</span><span class=p>,</span> <span class=n>from</span><span class=p>:</span> <span class=n>data</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span> <span class=k>catch</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=n>os_log</span><span class=p>(.</span><span class=n>error</span><span class=p>,</span> <span class=s>&#34;Errore parsing configurazione: %{public}@&#34;</span><span class=p>,</span> <span class=n>error</span><span class=p>.</span><span class=n>localizedDescription</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span> <span class=kc>nil</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=kd>public</span> <span class=kd>func</span> <span class=nf>save</span><span class=p>()</span> <span class=kr>throws</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>encoder</span> <span class=p>=</span> <span class=n>JSONEncoder</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=n>encoder</span><span class=p>.</span><span class=n>outputFormatting</span> <span class=p>=</span> <span class=p>[.</span><span class=n>prettyPrinted</span><span class=p>,</span> <span class=p>.</span><span class=n>sortedKeys</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>        <span class=kd>let</span> <span class=nv>data</span>
+</span></span></code></pre></td></tr></table></div></div></article></main><script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js crossorigin=anonymous></script><script>mermaid.init(0[0],"code.language-mermaid")</script></div><footer class="mt-8 mb-8"><div class="container mx-auto"><div class="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between items-center"><div class="text-center sm:text-left"><p class="mt-0 text-sm">© 2025 quincia</p><p class="mt-0 text-xs">Built with <a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a> v0.159.1
+and <a href=https://github.com/mivinci/hugo-theme-minima target=_blank rel="noopener noreferrer">Minima</a></p><p class="mt-0 text-xs font-mono opacity-50">next gen → 2026-04-02</p></div><p class="flex items-center mt-0"><a class="icon ml-1 mr-1" href=https://github.com/quincia title=github><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77 5.44 5.44.0 003.5 8.55c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg>
+</a><a class="icon ml-1 mr-1" href=/index.xml title=rss><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></div></div></footer></body></html>
